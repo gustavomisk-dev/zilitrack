@@ -274,6 +274,25 @@ def get_all_corbans() -> list:
     return sorted(corbans)
 
 
+def calcular_ranking() -> list[dict]:
+    """Retorna lista ordenada por taxa de conversão desc: [{corban, enviados, convertidos, taxa}]"""
+    corbans = get_all_corbans()
+    resultado = []
+    for corban in corbans:
+        enviados = sum(
+            len(read_csv(f)) for f in PASTA_ENVIADOS.glob(f"*_{corban}_*_enviados.csv")
+        )
+        convertidos = 0
+        if PASTA_CONVERTIDOS.exists():
+            convertidos = sum(
+                len(read_csv(f)) for f in PASTA_CONVERTIDOS.glob(f"*_{corban}_*_convertidos.csv")
+            )
+        taxa = convertidos / enviados if enviados else 0.0
+        resultado.append({"corban": corban, "enviados": enviados, "convertidos": convertidos, "taxa": taxa})
+    resultado.sort(key=lambda x: x["taxa"], reverse=True)
+    return resultado
+
+
 # ── páginas ───────────────────────────────────────────────────────────────────
 
 def page_clientes(corban: str):
@@ -451,6 +470,64 @@ def page_upload():
             st.markdown(f"<span style='font-size:0.82rem; color:{MUTED};'>Nenhum arquivo</span>", unsafe_allow_html=True)
 
 
+def page_ranking(corban: str):
+    st.header("Ranking", anchor=False)
+
+    ranking = calcular_ranking()
+    total = len(ranking)
+
+    if total == 0:
+        st.info("Ainda não há dados suficientes para exibir o ranking.")
+        return
+
+    posicao = next((i + 1 for i, r in enumerate(ranking) if r["corban"] == corban), None)
+
+    if posicao is None:
+        st.info("Sua promotora ainda não possui dados no ranking.")
+        return
+
+    sufixo = {1: "º", 2: "º", 3: "º"}.get(posicao, "º")
+    medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(posicao, "")
+
+    dados = next(r for r in ranking if r["corban"] == corban)
+    taxa = dados["taxa"] * 100
+
+    st.markdown(f"""
+        <div style="margin-top:1.5rem; text-align:center;">
+            <div style="font-size:4rem; line-height:1;">{medal if medal else "🏅"}</div>
+            <div style="margin-top:1rem; font-size:1rem; color:{MUTED};">Você está em</div>
+            <div style="font-size:3.5rem; font-weight:700; color:{GOLD}; line-height:1.1;">
+                {posicao}{sufixo} lugar
+            </div>
+            <div style="font-size:0.95rem; color:{MUTED}; margin-top:0.4rem;">
+                entre {total} promotora{"s" if total > 1 else ""} participante{"s" if total > 1 else ""}
+            </div>
+        </div>
+
+        <div style="
+            margin: 2.5rem auto 0 auto;
+            max-width: 360px;
+            background: #1A1A1A;
+            border: 1px solid #262626;
+            border-radius: 10px;
+            padding: 1.25rem 1.5rem;
+        ">
+            <div style="display:flex; justify-content:space-between; margin-bottom:0.75rem;">
+                <span style="color:{MUTED}; font-size:0.9rem;">Clientes enviados</span>
+                <span style="font-weight:600;">{dados["enviados"]}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:0.75rem;">
+                <span style="color:{MUTED}; font-size:0.9rem;">Conversões</span>
+                <span style="font-weight:600;">{dados["convertidos"]}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <span style="color:{MUTED}; font-size:0.9rem;">Taxa de conversão</span>
+                <span style="font-weight:700; color:{GOLD};">{taxa:.1f}%</span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+
 def page_como_usar():
     st.header("Como Usar", anchor=False)
 
@@ -539,7 +616,7 @@ def main():
         else:
             corban = st.session_state["corban"]
 
-        menu = ["Clientes", "Conversão"] + (["Upload"] if is_admin else ["Como Usar"])
+        menu = ["Clientes", "Conversão"] + (["Upload"] if is_admin else ["Ranking", "Como Usar"])
         page = st.radio("Menu", menu, label_visibility="collapsed")
         st.divider()
         if st.button("Sair", width="stretch"):
@@ -586,6 +663,8 @@ def main():
         page_conversao(corban)
     elif page == "Upload":
         page_upload()
+    elif page == "Ranking":
+        page_ranking(corban)
     else:
         page_como_usar()
 
