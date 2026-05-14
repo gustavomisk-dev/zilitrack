@@ -481,27 +481,6 @@ def page_conversao(corban: str | None):
         _sort_dates(list(available_conv.keys())),
     )
 
-    evo = get_evolution_data(corban)
-    if not evo.empty:
-        st.subheader("Evolução por Lote", anchor=False)
-        chart = (
-            alt.Chart(evo)
-            .mark_line(color=GOLD, point=alt.OverlayMarkDef(color=GOLD, size=60))
-            .encode(
-                x=alt.X("Data:O", sort=None, title="Data de envio"),
-                y=alt.Y("Taxa (%):Q", title="Taxa (%)"),
-                tooltip=[
-                    alt.Tooltip("Data:O", title="Data"),
-                    alt.Tooltip("Enviados:Q", title="Enviados"),
-                    alt.Tooltip("Convertidos:Q", title="Convertidos"),
-                    alt.Tooltip("Taxa (%):Q", title="Taxa (%)", format=".1f"),
-                ],
-            )
-            .properties(height=220)
-        )
-        st.altair_chart(chart, use_container_width=True)
-        st.divider()
-
     df_conv = read_csv(available_conv[selected])
 
     available_env = files_by_date(PASTA_ENVIADOS, corban, "enviados")
@@ -542,6 +521,27 @@ def page_conversao(corban: str | None):
         file_name=f"conversao_{selected}.csv",
         mime="text/csv",
     )
+
+    evo = get_evolution_data(corban)
+    if not evo.empty:
+        st.divider()
+        st.subheader("Evolução por Lote", anchor=False)
+        chart = (
+            alt.Chart(evo)
+            .mark_line(color=GOLD, point=alt.OverlayMarkDef(color=GOLD, size=60))
+            .encode(
+                x=alt.X("Data:O", sort=None, title="Data de envio"),
+                y=alt.Y("Taxa (%):Q", title="Taxa (%)"),
+                tooltip=[
+                    alt.Tooltip("Data:O", title="Data"),
+                    alt.Tooltip("Enviados:Q", title="Enviados"),
+                    alt.Tooltip("Convertidos:Q", title="Convertidos"),
+                    alt.Tooltip("Taxa (%):Q", title="Taxa (%)", format=".1f"),
+                ],
+            )
+            .properties(height=220)
+        )
+        st.altair_chart(chart, use_container_width=True)
 
 
 def page_upload():
