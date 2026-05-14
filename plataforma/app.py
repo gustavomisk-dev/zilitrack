@@ -207,7 +207,7 @@ _CONECTIVOS = {"de", "da", "do", "das", "dos", "e", "a", "o", "em", "na", "no", 
 
 def fmt_nome(val) -> str:
     if not isinstance(val, str) or not val.strip():
-        return val
+        return ""
     words = val.strip().split()
     return " ".join(
         w.capitalize() if i == 0 or w.lower() not in _CONECTIVOS else w.lower()
@@ -226,7 +226,7 @@ def fmt_brl(val) -> str:
         fmt = f"{n:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         return f"R$ {fmt}"
     except (ValueError, TypeError):
-        return val
+        return ""
 
 
 def files_by_date(pasta: Path, corban: str, suffix: str) -> dict:
@@ -277,6 +277,7 @@ def page_clientes(corban: str):
         .rename(columns={"NomeCliente": "Nome do Cliente", "Último Processamento": "Data e Hora do Processamento"})
         [["Data e Hora do Processamento", "CPF", "Nome do Cliente"]]
     )
+    df = df.fillna("")
     df["Nome do Cliente"] = df["Nome do Cliente"].apply(fmt_nome)
     st.dataframe(df, width="stretch", hide_index=True)
 
@@ -327,6 +328,7 @@ def page_conversao(corban: str):
         outras = [c for c in df_conv.columns if c != "Data e Hora do Processamento"]
         df_conv = df_conv[["Data e Hora do Processamento"] + outras]
 
+    df_conv = df_conv.fillna("")
     if "Nome do Cliente" in df_conv.columns:
         df_conv["Nome do Cliente"] = df_conv["Nome do Cliente"].apply(fmt_nome)
     if "Valor do Contrato" in df_conv.columns:
