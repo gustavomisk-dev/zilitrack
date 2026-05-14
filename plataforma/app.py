@@ -283,7 +283,9 @@ def page_clientes(corban: str):
 
     df = df.fillna("")
     df["Nome do Cliente"] = df["Nome do Cliente"].apply(fmt_nome)
-    st.dataframe(df, width="stretch", hide_index=True)
+    df_display = df.copy()
+    df_display.insert(0, "#", range(1, len(df_display) + 1))
+    st.dataframe(df_display, width="stretch", hide_index=True)
 
     st.download_button(
         "Baixar CSV",
@@ -342,7 +344,9 @@ def page_conversao(corban: str):
     if "Valor do Contrato" in df_conv.columns:
         df_conv["Valor do Contrato"] = df_conv["Valor do Contrato"].apply(fmt_brl)
 
-    st.dataframe(df_conv, width="stretch", hide_index=True)
+    df_conv_display = df_conv.copy()
+    df_conv_display.insert(0, "#", range(1, len(df_conv_display) + 1))
+    st.dataframe(df_conv_display, width="stretch", hide_index=True)
 
     st.download_button(
         "Baixar CSV",
