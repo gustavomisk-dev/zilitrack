@@ -257,11 +257,14 @@ def page_clientes(corban: str):
     st.header("Clientes", anchor=False)
     available = files_by_date(PASTA_ENVIADOS, corban, "enviados")
     if not available:
-        st.info(
-            "Nenhuma base de clientes disponível no momento. "
-            "Assim que os dados forem enviados pela ZiliCred, eles aparecerão aqui automaticamente. "
-            "Em caso de dúvidas, entre em contato com a equipe."
-        )
+        if st.session_state.get("is_admin"):
+            st.info("Nenhuma base enviada ainda. Acesse a página Upload para adicionar os arquivos.")
+        else:
+            st.info(
+                "Nenhuma base de clientes disponível no momento. "
+                "Assim que os dados forem enviados pela ZiliCred, eles aparecerão aqui automaticamente. "
+                "Em caso de dúvidas, entre em contato com a equipe."
+            )
         return
 
     selected = st.selectbox(
@@ -289,11 +292,14 @@ def page_conversao(corban: str):
     st.header("Conversão", anchor=False)
     available_conv = files_by_date(PASTA_CONVERTIDOS, corban, "convertidos")
     if not available_conv:
-        st.info(
-            "Nenhum relatório de conversão disponível no momento. "
-            "Assim que os dados forem processados pela ZiliCred, eles aparecerão aqui automaticamente. "
-            "Em caso de dúvidas, entre em contato com a equipe."
-        )
+        if st.session_state.get("is_admin"):
+            st.info("Nenhuma conversão disponível ainda. Acesse a página Upload para adicionar os arquivos.")
+        else:
+            st.info(
+                "Nenhum relatório de conversão disponível no momento. "
+                "Assim que os dados forem processados pela ZiliCred, eles aparecerão aqui automaticamente. "
+                "Em caso de dúvidas, entre em contato com a equipe."
+            )
         return
 
     selected = st.selectbox(
