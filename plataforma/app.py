@@ -107,6 +107,29 @@ div[data-baseweb="select"] > div:focus-within {{
     overflow: hidden;
 }}
 
+/* ── menu de navegação (radio sem bolinhas) ──────────────────── */
+[data-testid="stSidebar"] div[data-testid="stRadio"] > div {{
+    gap: 2px !important;
+}}
+[data-testid="stSidebar"] div[data-testid="stRadio"] > div > label > div:first-child {{
+    display: none !important;
+}}
+[data-testid="stSidebar"] div[data-testid="stRadio"] > div > label {{
+    padding: 0.45rem 0.75rem !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    transition: background-color 0.15s !important;
+    width: 100% !important;
+}}
+[data-testid="stSidebar"] div[data-testid="stRadio"] > div > label:hover {{
+    background-color: rgba(255,255,255,0.05) !important;
+}}
+[data-testid="stSidebar"] div[data-testid="stRadio"] > div > label:has(input:checked) {{
+    background-color: rgba(240,180,41,0.12) !important;
+    color: {GOLD} !important;
+    font-weight: 600 !important;
+}}
+
 /* ── divisor ─────────────────────────────────────────────────── */
 hr {{ border-color: {BORDER} !important; }}
 
