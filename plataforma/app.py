@@ -277,6 +277,10 @@ def page_clientes(corban: str):
         .rename(columns={"NomeCliente": "Nome do Cliente", "Último Processamento": "Data e Hora do Processamento"})
         [["Data e Hora do Processamento", "CPF", "Nome do Cliente"]]
     )
+    if df.empty:
+        st.info("Nenhum cliente registrado nesta base.")
+        return
+
     df = df.fillna("")
     df["Nome do Cliente"] = df["Nome do Cliente"].apply(fmt_nome)
     st.dataframe(df, width="stretch", hide_index=True)
@@ -327,6 +331,10 @@ def page_conversao(corban: str):
     if "Data e Hora do Processamento" in df_conv.columns:
         outras = [c for c in df_conv.columns if c != "Data e Hora do Processamento"]
         df_conv = df_conv[["Data e Hora do Processamento"] + outras]
+
+    if df_conv.empty:
+        st.info("Nenhuma conversão registrada para esta base.")
+        return
 
     df_conv = df_conv.fillna("")
     if "Nome do Cliente" in df_conv.columns:
