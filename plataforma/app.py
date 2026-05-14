@@ -29,6 +29,10 @@ footer {{ visibility: hidden; }}
 [data-testid="stDecoration"] {{ display: none; }}
 [data-testid="stToolbarActions"] {{ visibility: hidden; }}
 [data-testid="stBaseButton-header"] {{ visibility: hidden; }}
+.viewerBadge_container__r5tak {{ display: none !important; }}
+.viewerBadge_link__qRIco {{ display: none !important; }}
+a[href*="streamlit.io"] img {{ display: none !important; }}
+a[href*="streamlit.io"][target="_blank"] {{ display: none !important; }}
 
 /* ── sidebar largura fixa (só conteúdo interno) ──────────────── */
 [data-testid="stSidebar"] > div:first-child {{
