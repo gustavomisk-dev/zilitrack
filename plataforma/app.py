@@ -1,6 +1,6 @@
 import altair as alt
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import bcrypt
@@ -266,21 +266,27 @@ def get_latest_processamento(df: pd.DataFrame) -> str | None:
         dates = pd.to_datetime(df[col], format="%d/%m/%Y %H:%M:%S", errors="coerce").dropna()
         if dates.empty:
             return None
-        return dates.max().strftime("%d/%m/%Y às %H:%M")
+        return (dates.max() + timedelta(minutes=20)).strftime("%d/%m/%Y às %H:%M")
     except Exception:
         return None
 
 
-def get_upload_time(filename: str) -> str | None:
+def get_upload_time(filename: str, file_path: Path | None = None) -> str | None:
     data = _load_json(DATA_DIR / "upload_log.json", {})
     ts = data.get(filename)
-    if not ts:
-        return None
-    try:
-        dt = datetime.fromisoformat(ts) - timedelta(hours=3)
-        return dt.strftime("%d/%m/%Y às %H:%M")
-    except Exception:
-        return None
+    if ts:
+        try:
+            dt = datetime.fromisoformat(ts) - timedelta(hours=3)
+            return dt.strftime("%d/%m/%Y às %H:%M")
+        except Exception:
+            pass
+    if file_path and file_path.exists():
+        try:
+            dt = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc).replace(tzinfo=None) - timedelta(hours=3)
+            return dt.strftime("%d/%m/%Y às %H:%M")
+        except Exception:
+            pass
+    return None
 
 
 def update_last_seen(corban: str, date_str: str):
@@ -555,7 +561,7 @@ def page_conversao(corban: str | None):
         df_conv["Valor do Contrato"] = df_conv["Valor do Contrato"].apply(fmt_brl)
 
     total_conv = len(df_conv)
-    upload_time = get_upload_time(available_conv[selected].name)
+    upload_time = get_upload_time(available_conv[selected].name, available_conv[selected])
     sep = f"<div style='width:1px; height:2.5rem; background:{BORDER};'></div>" if upload_time else ""
     atualizado_html = f"""
         {sep}
