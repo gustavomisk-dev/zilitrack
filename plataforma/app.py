@@ -360,7 +360,7 @@ def page_upload():
             PASTA_ENVIADOS.mkdir(parents=True, exist_ok=True)
             for f in uploaded_env:
                 (PASTA_ENVIADOS / f.name).write_bytes(f.read())
-            st.success(f"{len(uploaded_env)} arquivo(s) salvo(s).")
+            st.rerun()
 
     with c2:
         st.markdown(
@@ -377,13 +377,13 @@ def page_upload():
                 PASTA_CONVERTIDOS.mkdir(parents=True, exist_ok=True)
                 for f in uploaded_conv:
                     (PASTA_CONVERTIDOS / f.name).write_bytes(f.read())
-                st.success(f"{len(uploaded_conv)} arquivo(s) salvo(s).")
+                st.rerun()
         with bc2:
             if st.button("Limpar convertidos", key="btn_limpar"):
                 if PASTA_CONVERTIDOS.exists():
                     for f in PASTA_CONVERTIDOS.glob("*.csv"):
                         f.unlink()
-                st.success("Convertidos removidos.")
+                st.rerun()
 
     st.divider()
     st.markdown(
