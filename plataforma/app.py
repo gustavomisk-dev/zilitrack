@@ -129,6 +129,8 @@ hr {{ border-color: {BORDER} !important; }}
 # ── autenticação ──────────────────────────────────────────────────────────────
 
 def load_users():
+    if "users" in st.secrets:
+        return {u: dict(data) for u, data in st.secrets["users"].items()}
     with open(HERE / "users.json", encoding="utf-8") as f:
         return json.load(f)
 
