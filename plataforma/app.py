@@ -784,7 +784,7 @@ def page_dashboard():
         log_rows = []
         for username, info in sorted(corban_log.items()):
             try:
-                dt = datetime.fromisoformat(info["last_access"])
+                dt = datetime.fromisoformat(info["last_access"]) - timedelta(hours=3)
                 dt_fmt = dt.strftime("%d/%m/%Y às %H:%M")
             except Exception:
                 dt_fmt = info.get("last_access", "—")
