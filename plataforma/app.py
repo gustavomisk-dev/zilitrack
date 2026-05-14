@@ -428,6 +428,44 @@ def page_upload():
             st.markdown(f"<span style='font-size:0.82rem; color:{MUTED};'>Nenhum arquivo</span>", unsafe_allow_html=True)
 
 
+def page_como_usar():
+    st.header("Como Usar", anchor=False)
+
+    st.markdown(f"""
+        <div style="max-width:680px; line-height:1.75; color:#E5E7EB;">
+
+        <h4 style="color:{GOLD}; margin-top:1.5rem;">Clientes</h4>
+        <p>
+            Exibe a base de clientes que foi enviada para a sua promotora pela ZiliCred.
+            Use o seletor <b>Data de envio da base</b> para escolher o lote desejado.
+            A tabela mostra a data e hora do processamento, o CPF e o nome de cada cliente.
+            Clique em <b>Baixar CSV</b> para exportar a lista.
+        </p>
+
+        <h4 style="color:{GOLD}; margin-top:1.5rem;">Conversão</h4>
+        <p>
+            Exibe os clientes da sua base que efetivaram um contrato.
+            Selecione o lote pela data de envio para visualizar CPF, nome,
+            data de processamento e valor do contrato.
+            Clique em <b>Baixar CSV</b> para exportar o relatório.
+        </p>
+
+        <h4 style="color:{GOLD}; margin-top:1.5rem;">Atualização dos dados</h4>
+        <p>
+            Os dados são atualizados periodicamente pela equipe da ZiliCred.
+            Caso a aba de Clientes ou Conversão apareça sem informações,
+            aguarde a próxima atualização ou entre em contato com a equipe.
+        </p>
+
+        <h4 style="color:{GOLD}; margin-top:1.5rem;">Dúvidas</h4>
+        <p>
+            Entre em contato com a ZiliCred pelo e-mail ou pelo seu gerente de relacionamento.
+        </p>
+
+        </div>
+    """, unsafe_allow_html=True)
+
+
 # ── entry point ───────────────────────────────────────────────────────────────
 
 def main():
@@ -478,7 +516,7 @@ def main():
         else:
             corban = st.session_state["corban"]
 
-        menu = ["Clientes", "Conversão"] + (["Upload"] if is_admin else [])
+        menu = ["Clientes", "Conversão"] + (["Upload"] if is_admin else ["Como Usar"])
         page = st.radio("Menu", menu, label_visibility="collapsed")
         st.divider()
         if st.button("Sair", width="stretch"):
@@ -523,8 +561,10 @@ def main():
         page_clientes(corban)
     elif page == "Conversão":
         page_conversao(corban)
-    else:
+    elif page == "Upload":
         page_upload()
+    else:
+        page_como_usar()
 
 
 if __name__ == "__main__":
