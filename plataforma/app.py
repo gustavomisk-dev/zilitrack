@@ -345,6 +345,9 @@ def page_conversao(corban: str):
 def page_upload():
     st.header("Upload de Bases", anchor=False)
 
+    st.session_state.setdefault("up_env_n", 0)
+    st.session_state.setdefault("up_conv_n", 0)
+
     c1, c2 = st.columns(2)
 
     with c1:
@@ -354,12 +357,13 @@ def page_upload():
         )
         uploaded_env = st.file_uploader(
             "enviados", type="csv", accept_multiple_files=True,
-            label_visibility="collapsed", key="up_env",
+            label_visibility="collapsed", key=f"up_env_{st.session_state.up_env_n}",
         )
         if uploaded_env and st.button("Salvar", key="btn_env"):
             PASTA_ENVIADOS.mkdir(parents=True, exist_ok=True)
             for f in uploaded_env:
                 (PASTA_ENVIADOS / f.name).write_bytes(f.read())
+            st.session_state.up_env_n += 1
             st.rerun()
 
     with c2:
@@ -369,7 +373,7 @@ def page_upload():
         )
         uploaded_conv = st.file_uploader(
             "convertidos", type="csv", accept_multiple_files=True,
-            label_visibility="collapsed", key="up_conv",
+            label_visibility="collapsed", key=f"up_conv_{st.session_state.up_conv_n}",
         )
         bc1, bc2 = st.columns([1, 1])
         with bc1:
@@ -377,6 +381,7 @@ def page_upload():
                 PASTA_CONVERTIDOS.mkdir(parents=True, exist_ok=True)
                 for f in uploaded_conv:
                     (PASTA_CONVERTIDOS / f.name).write_bytes(f.read())
+                st.session_state.up_conv_n += 1
                 st.rerun()
         with bc2:
             if st.button("Limpar convertidos", key="btn_limpar"):
