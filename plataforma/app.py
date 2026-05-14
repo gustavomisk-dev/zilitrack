@@ -1,6 +1,8 @@
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 
+import bcrypt
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -126,6 +128,9 @@ hr {{ border-color: {BORDER} !important; }}
 """
 
 
+# {username: {"count": int, "blocked_until": datetime | None}}
+_login_attempts: dict = {}
+
 # ── autenticação ──────────────────────────────────────────────────────────────
 
 def load_users():
@@ -156,20 +161,36 @@ def login_page():
             submitted = st.form_submit_button("Entrar", width="stretch")
 
     if submitted:
-        users = load_users()
-        user  = users.get(username)
-        if user and user["password"] == password:
-            st.session_state.update({
-                "logged_in":      True,
-                "corban":         user.get("corban"),
-                "display_name":   user["display_name"],
-                "is_admin":       user.get("is_admin", False),
-                "expand_sidebar": True,
-            })
-            st.rerun()
-        else:
+        attempt = _login_attempts.get(username, {"count": 0, "blocked_until": None})
+        blocked_until = attempt["blocked_until"]
+
+        if blocked_until and datetime.now() < blocked_until:
+            remaining = int((blocked_until - datetime.now()).total_seconds() / 60)
             with col:
-                st.error("Usuário ou senha incorretos.")
+                st.error(f"Usuário bloqueado por tentativas inválidas. Tente novamente em {remaining} minuto(s).")
+        else:
+            users = load_users()
+            user  = users.get(username)
+            if user and bcrypt.checkpw(password.encode(), user["password"].encode()):
+                _login_attempts.pop(username, None)
+                st.session_state.update({
+                    "logged_in":      True,
+                    "corban":         user.get("corban"),
+                    "display_name":   user["display_name"],
+                    "is_admin":       user.get("is_admin", False),
+                    "expand_sidebar": True,
+                })
+                st.rerun()
+            else:
+                attempt["count"] += 1
+                if attempt["count"] >= 3:
+                    attempt["blocked_until"] = datetime.now() + timedelta(hours=1)
+                _login_attempts[username] = attempt
+                with col:
+                    if attempt["count"] >= 3:
+                        st.error("Usuário bloqueado por 1 hora após tentativas inválidas.")
+                    else:
+                        st.error("Usuário ou senha incorretos.")
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
