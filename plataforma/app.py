@@ -463,6 +463,15 @@ def page_clientes(corban: str | None):
     df["Nome do Cliente"] = df["Nome do Cliente"].apply(fmt_nome)
 
     total = len(df)
+    enviado_em = get_latest_processamento(df)
+    sep = f"<div style='width:1px; height:2.5rem; background:{BORDER};'></div>" if enviado_em else ""
+    enviado_html = f"""
+        {sep}
+        <div>
+            <div style="font-size:0.78rem; color:{MUTED}; margin-bottom:0.2rem;">Enviado em</div>
+            <div style="font-size:1rem; font-weight:600; line-height:1;">{enviado_em}</div>
+        </div>
+    """ if enviado_em else ""
     st.markdown(f"""
         <div style="
             background: {DARK_CARD};
@@ -470,24 +479,18 @@ def page_clientes(corban: str | None):
             border-radius: 8px;
             padding: 1rem 1.5rem;
             margin-bottom: 1rem;
-            display: inline-block;
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+            width: fit-content;
         ">
-            <div style="font-size:0.78rem; color:{MUTED}; margin-bottom:0.2rem;">
-                Total de clientes
+            <div>
+                <div style="font-size:0.78rem; color:{MUTED}; margin-bottom:0.2rem;">Total de clientes</div>
+                <div style="font-size:1.75rem; font-weight:700; color:{GOLD}; line-height:1;">{total}</div>
             </div>
-            <div style="font-size:1.75rem; font-weight:700; color:{GOLD}; line-height:1;">
-                {total}
-            </div>
+            {enviado_html}
         </div>
     """, unsafe_allow_html=True)
-
-    enviado_em = get_latest_processamento(df)
-    if enviado_em:
-        st.markdown(
-            f"<p style='font-size:0.78rem; color:{MUTED}; margin:0 0 0.75rem 0;'>"
-            f"Enviado em {enviado_em}</p>",
-            unsafe_allow_html=True,
-        )
 
     df_display = df.copy()
     df_display.index = range(1, len(df_display) + 1)
@@ -551,13 +554,35 @@ def page_conversao(corban: str | None):
     if "Valor do Contrato" in df_conv.columns:
         df_conv["Valor do Contrato"] = df_conv["Valor do Contrato"].apply(fmt_brl)
 
+    total_conv = len(df_conv)
     upload_time = get_upload_time(available_conv[selected].name)
-    if upload_time:
-        st.markdown(
-            f"<p style='font-size:0.78rem; color:{MUTED}; margin:0 0 0.75rem 0;'>"
-            f"Atualizado em {upload_time}</p>",
-            unsafe_allow_html=True,
-        )
+    sep = f"<div style='width:1px; height:2.5rem; background:{BORDER};'></div>" if upload_time else ""
+    atualizado_html = f"""
+        {sep}
+        <div>
+            <div style="font-size:0.78rem; color:{MUTED}; margin-bottom:0.2rem;">Atualizado em</div>
+            <div style="font-size:1rem; font-weight:600; line-height:1;">{upload_time}</div>
+        </div>
+    """ if upload_time else ""
+    st.markdown(f"""
+        <div style="
+            background: {DARK_CARD};
+            border: 1px solid {BORDER};
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin-bottom: 1rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+            width: fit-content;
+        ">
+            <div>
+                <div style="font-size:0.78rem; color:{MUTED}; margin-bottom:0.2rem;">Clientes convertidos</div>
+                <div style="font-size:1.75rem; font-weight:700; color:{GOLD}; line-height:1;">{total_conv}</div>
+            </div>
+            {atualizado_html}
+        </div>
+    """, unsafe_allow_html=True)
 
     df_conv_display = df_conv.copy()
     df_conv_display.index = range(1, len(df_conv_display) + 1)
