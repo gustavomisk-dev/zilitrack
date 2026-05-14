@@ -679,10 +679,16 @@ def page_como_usar():
 
         <h4 style="color:{GOLD}; margin-top:1.5rem;">Clientes</h4>
         <p>
-            Exibe a base de clientes que foi enviada para a sua promotora pela ZiliCred.
-            Use o seletor <b>Data de envio da base</b> para escolher o lote desejado.
-            A tabela mostra a data e hora do processamento, o CPF e o nome de cada cliente.
+            Exibe a base de clientes enviada pela ZiliCred para a sua promotora.
+            Use o seletor <b>Data de envio da base</b> para alternar entre lotes.
+            O resumo no topo mostra o total de clientes do lote selecionado.
+            A tabela traz a data e hora do processamento, o CPF e o nome de cada cliente.
             Clique em <b>Baixar CSV</b> para exportar a lista.
+        </p>
+        <p>
+            Quando houver um lote novo ainda não visualizado, o menu exibirá
+            um indicador ao lado de <b>Clientes</b>. Ele desaparece assim que
+            a página for aberta.
         </p>
 
         <h4 style="color:{GOLD}; margin-top:1.5rem;">Conversão</h4>
@@ -691,6 +697,18 @@ def page_como_usar():
             Selecione o lote pela data de envio para visualizar CPF, nome,
             data de processamento e valor do contrato.
             Clique em <b>Baixar CSV</b> para exportar o relatório.
+        </p>
+        <p>
+            Abaixo da tabela, o gráfico de <b>Evolução por Lote</b> mostra a taxa de
+            conversão de cada lote ao longo do tempo. Passe o cursor sobre os pontos
+            para ver os detalhes de enviados, convertidos e taxa.
+        </p>
+
+        <h4 style="color:{GOLD}; margin-top:1.5rem;">Ranking</h4>
+        <p>
+            Mostra a sua posição no ranking de conversões entre todas as promotoras
+            participantes, sem revelar quem são as demais ou quantas estão no ranking.
+            Também exibe seus números de clientes enviados, convertidos e taxa de conversão.
         </p>
 
         <h4 style="color:{GOLD}; margin-top:1.5rem;">Atualização dos dados</h4>
