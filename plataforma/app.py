@@ -284,8 +284,9 @@ def page_clientes(corban: str):
     df = df.fillna("")
     df["Nome do Cliente"] = df["Nome do Cliente"].apply(fmt_nome)
     df_display = df.copy()
-    df_display.insert(0, "#", range(1, len(df_display) + 1))
-    st.dataframe(df_display, width="stretch", hide_index=True)
+    df_display.insert(0, "#", [str(i) for i in range(1, len(df_display) + 1)])
+    st.dataframe(df_display, width="stretch", hide_index=True,
+                 column_config={"#": st.column_config.TextColumn("#", width="small")})
 
     st.download_button(
         "Baixar CSV",
