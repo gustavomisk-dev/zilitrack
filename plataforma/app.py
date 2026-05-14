@@ -499,9 +499,6 @@ def page_ranking(corban: str):
             <div style="font-size:3.5rem; font-weight:700; color:{GOLD}; line-height:1.1;">
                 {posicao}{sufixo} lugar
             </div>
-            <div style="font-size:0.95rem; color:{MUTED}; margin-top:0.4rem;">
-                entre {total} promotora{"s" if total > 1 else ""} participante{"s" if total > 1 else ""}
-            </div>
         </div>
 
         <div style="
