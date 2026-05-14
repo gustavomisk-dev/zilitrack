@@ -226,6 +226,8 @@ def fmt_brl(val) -> str:
 
 
 def files_by_date(pasta: Path, corban: str, suffix: str) -> dict:
+    if not pasta.exists():
+        return {}
     result = {}
     for f in sorted(pasta.glob(f"*_{corban}_*_{suffix}.csv")):
         parts = f.stem.split("_")
@@ -235,6 +237,8 @@ def files_by_date(pasta: Path, corban: str, suffix: str) -> dict:
 
 
 def get_all_corbans() -> list:
+    if not PASTA_ENVIADOS.exists():
+        return []
     corbans = set()
     for f in PASTA_ENVIADOS.glob("*_enviados.csv"):
         parts = f.stem.split("_")
