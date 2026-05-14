@@ -228,7 +228,11 @@ def page_clientes(corban: str):
     st.header("Clientes", anchor=False)
     available = files_by_date(PASTA_ENVIADOS, corban, "enviados")
     if not available:
-        st.info("Nenhuma base disponível.")
+        st.info(
+            "Nenhuma base de clientes disponível no momento. "
+            "Assim que os dados forem enviados pela ZiliCred, eles aparecerão aqui automaticamente. "
+            "Em caso de dúvidas, entre em contato com a equipe."
+        )
         return
 
     selected = st.selectbox(
@@ -256,7 +260,11 @@ def page_conversao(corban: str):
     st.header("Conversão", anchor=False)
     available_conv = files_by_date(PASTA_CONVERTIDOS, corban, "convertidos")
     if not available_conv:
-        st.info("Nenhum relatório de conversão disponível.")
+        st.info(
+            "Nenhum relatório de conversão disponível no momento. "
+            "Assim que os dados forem processados pela ZiliCred, eles aparecerão aqui automaticamente. "
+            "Em caso de dúvidas, entre em contato com a equipe."
+        )
         return
 
     selected = st.selectbox(
@@ -328,11 +336,19 @@ def page_upload():
             "convertidos", type="csv", accept_multiple_files=True,
             label_visibility="collapsed", key="up_conv",
         )
-        if uploaded_conv and st.button("Salvar", key="btn_conv"):
-            PASTA_CONVERTIDOS.mkdir(parents=True, exist_ok=True)
-            for f in uploaded_conv:
-                (PASTA_CONVERTIDOS / f.name).write_bytes(f.read())
-            st.success(f"{len(uploaded_conv)} arquivo(s) salvo(s).")
+        bc1, bc2 = st.columns([1, 1])
+        with bc1:
+            if uploaded_conv and st.button("Salvar", key="btn_conv"):
+                PASTA_CONVERTIDOS.mkdir(parents=True, exist_ok=True)
+                for f in uploaded_conv:
+                    (PASTA_CONVERTIDOS / f.name).write_bytes(f.read())
+                st.success(f"{len(uploaded_conv)} arquivo(s) salvo(s).")
+        with bc2:
+            if st.button("Limpar convertidos", key="btn_limpar"):
+                if PASTA_CONVERTIDOS.exists():
+                    for f in PASTA_CONVERTIDOS.glob("*.csv"):
+                        f.unlink()
+                st.success("Convertidos removidos.")
 
     st.divider()
     st.markdown(
