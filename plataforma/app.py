@@ -439,9 +439,12 @@ def main():
         if is_admin:
             corbans = get_all_corbans()
             corban  = st.selectbox(
-                "Corban", corbans,
+                "Corban", corbans if corbans else ["—"],
                 format_func=lambda c: CORBAN_NAMES.get(c, c),
+                disabled=not corbans,
             )
+            if not corbans:
+                corban = None
             st.divider()
         else:
             corban = st.session_state["corban"]
