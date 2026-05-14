@@ -200,7 +200,7 @@ def login_page():
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def read_csv(path):
-    return pd.read_csv(path, sep=";", encoding="utf-8-sig", dtype=str)
+    return pd.read_csv(path, sep=";", encoding="utf-8-sig", dtype=str, keep_default_na=False)
 
 
 _CONECTIVOS = {"de", "da", "do", "das", "dos", "e", "a", "o", "em", "na", "no", "nas", "nos", "por", "para", "com"}
