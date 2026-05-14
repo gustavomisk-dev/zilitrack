@@ -436,7 +436,7 @@ def main():
     components.html("""
         <script>
         (function() {
-            function removeResizeHandles() {
+            function cleanDOM() {
                 var doc = window.parent.document;
                 doc.querySelectorAll('*').forEach(function(el) {
                     var cursor = window.parent.getComputedStyle(el).cursor;
@@ -445,9 +445,17 @@ def main():
                         el.style.display = 'none';
                     }
                 });
+                doc.querySelectorAll('a[href*="streamlit.io"]').forEach(function(el) {
+                    el.style.display = 'none';
+                });
+                doc.querySelectorAll('img[src*="githubusercontent.com"]').forEach(function(el) {
+                    var parent = el.closest('a') || el.parentElement;
+                    if (parent) parent.style.display = 'none';
+                });
             }
-            setTimeout(removeResizeHandles, 300);
-            setTimeout(removeResizeHandles, 1000);
+            setTimeout(cleanDOM, 300);
+            setTimeout(cleanDOM, 1000);
+            setTimeout(cleanDOM, 3000);
         })();
         </script>
     """, height=0, scrolling=False)
