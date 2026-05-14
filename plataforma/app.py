@@ -438,26 +438,13 @@ def page_clientes(corban: str | None):
             border-radius: 8px;
             padding: 1rem 1.5rem;
             margin-bottom: 1rem;
-            display: flex;
-            gap: 2.5rem;
-            align-items: center;
+            display: inline-block;
         ">
-            <div>
-                <div style="font-size:0.78rem; color:{MUTED}; margin-bottom:0.2rem;">
-                    Total de clientes
-                </div>
-                <div style="font-size:1.75rem; font-weight:700; color:{GOLD}; line-height:1;">
-                    {total}
-                </div>
+            <div style="font-size:0.78rem; color:{MUTED}; margin-bottom:0.2rem;">
+                Total de clientes
             </div>
-            <div style="width:1px; height:2.5rem; background:{BORDER};"></div>
-            <div>
-                <div style="font-size:0.78rem; color:{MUTED}; margin-bottom:0.2rem;">
-                    Data de envio
-                </div>
-                <div style="font-size:1.1rem; font-weight:600; line-height:1;">
-                    {selected}
-                </div>
+            <div style="font-size:1.75rem; font-weight:700; color:{GOLD}; line-height:1;">
+                {total}
             </div>
         </div>
     """, unsafe_allow_html=True)
@@ -477,27 +464,6 @@ def page_clientes(corban: str | None):
 def page_conversao(corban: str | None):
     st.header("Conversão", anchor=False)
 
-    evo = get_evolution_data(corban)
-    if not evo.empty:
-        st.subheader("Evolução por Lote", anchor=False)
-        chart = (
-            alt.Chart(evo)
-            .mark_bar(color=GOLD, opacity=0.85)
-            .encode(
-                x=alt.X("Data:O", sort=None, title="Data de envio"),
-                y=alt.Y("Taxa (%):Q", title="Taxa (%)"),
-                tooltip=[
-                    alt.Tooltip("Data:O", title="Data"),
-                    alt.Tooltip("Enviados:Q", title="Enviados"),
-                    alt.Tooltip("Convertidos:Q", title="Convertidos"),
-                    alt.Tooltip("Taxa (%):Q", title="Taxa (%)", format=".1f"),
-                ],
-            )
-            .properties(height=220)
-        )
-        st.altair_chart(chart, use_container_width=True)
-        st.divider()
-
     available_conv = files_by_date(PASTA_CONVERTIDOS, corban, "convertidos")
     if not available_conv:
         if st.session_state.get("is_admin"):
@@ -514,6 +480,27 @@ def page_conversao(corban: str | None):
         "Data de envio da base",
         _sort_dates(list(available_conv.keys())),
     )
+
+    evo = get_evolution_data(corban)
+    if not evo.empty:
+        st.subheader("Evolução por Lote", anchor=False)
+        chart = (
+            alt.Chart(evo)
+            .mark_line(color=GOLD, point=alt.OverlayMarkDef(color=GOLD, size=60))
+            .encode(
+                x=alt.X("Data:O", sort=None, title="Data de envio"),
+                y=alt.Y("Taxa (%):Q", title="Taxa (%)"),
+                tooltip=[
+                    alt.Tooltip("Data:O", title="Data"),
+                    alt.Tooltip("Enviados:Q", title="Enviados"),
+                    alt.Tooltip("Convertidos:Q", title="Convertidos"),
+                    alt.Tooltip("Taxa (%):Q", title="Taxa (%)", format=".1f"),
+                ],
+            )
+            .properties(height=220)
+        )
+        st.altair_chart(chart, use_container_width=True)
+        st.divider()
 
     df_conv = read_csv(available_conv[selected])
 
