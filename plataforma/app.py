@@ -171,7 +171,11 @@ def login_page():
         else:
             users = load_users()
             user  = users.get(username)
-            if user and bcrypt.checkpw(password.encode(), user["password"].encode()):
+            try:
+                pw_ok = user is not None and bcrypt.checkpw(password.encode(), user["password"].encode())
+            except Exception:
+                pw_ok = False
+            if pw_ok:
                 _login_attempts.pop(username, None)
                 st.session_state.update({
                     "logged_in":      True,
