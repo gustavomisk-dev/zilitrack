@@ -1,3 +1,4 @@
+import altair as alt
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -11,6 +12,7 @@ HERE = Path(__file__).parent
 ROOT = HERE.parent
 PASTA_ENVIADOS    = ROOT / "corban" / "enviados"
 PASTA_CONVERTIDOS = ROOT / "corban" / "convertidos"
+DATA_DIR          = HERE / "data"
 
 APP_NAME  = "ZiliTrack"
 GOLD      = "#F0B429"
@@ -200,6 +202,7 @@ def login_page():
                 pw_ok = False
             if pw_ok:
                 _login_attempts.pop(username, None)
+                log_access(username, user["display_name"])
                 st.session_state.update({
                     "logged_in":      True,
                     "corban":         user.get("corban"),
@@ -218,6 +221,59 @@ def login_page():
                         st.error("Usuário bloqueado por 1 hora após tentativas inválidas.")
                     else:
                         st.error("Usuário ou senha incorretos.")
+
+
+# ── persistência ──────────────────────────────────────────────────────────────
+
+def _load_json(path: Path, default):
+    if path.exists():
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return default
+
+
+def _save_json(path: Path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def log_access(username: str, display_name: str):
+    path = DATA_DIR / "access_log.json"
+    log = _load_json(path, {})
+    log[username] = {
+        "last_access": datetime.now().isoformat(timespec="seconds"),
+        "display_name": display_name,
+    }
+    _save_json(path, log)
+
+
+def update_last_seen(corban: str, date_str: str):
+    path = DATA_DIR / "last_seen.json"
+    data = _load_json(path, {})
+    data[corban] = date_str
+    _save_json(path, data)
+
+
+def get_last_seen(corban: str) -> str | None:
+    return _load_json(DATA_DIR / "last_seen.json", {}).get(corban)
+
+
+def has_new_base(corban: str) -> bool:
+    available = files_by_date(PASTA_ENVIADOS, corban, "enviados")
+    if not available:
+        return False
+    try:
+        latest_date = max(datetime.strptime(d, "%d-%m-%Y") for d in available)
+        last_seen_str = get_last_seen(corban)
+        if not last_seen_str:
+            return True
+        return latest_date > datetime.strptime(last_seen_str, "%d-%m-%Y")
+    except ValueError:
+        return False
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -252,8 +308,8 @@ def fmt_brl(val) -> str:
         return ""
 
 
-def files_by_date(pasta: Path, corban: str, suffix: str) -> dict:
-    if not pasta.exists():
+def files_by_date(pasta: Path, corban: str | None, suffix: str) -> dict:
+    if not pasta.exists() or not corban:
         return {}
     result = {}
     for f in sorted(pasta.glob(f"*_{corban}_*_{suffix}.csv")):
@@ -293,9 +349,52 @@ def calcular_ranking() -> list[dict]:
     return resultado
 
 
+def _sort_dates(dates: list[str]) -> list[str]:
+    """Ordena datas no formato DD-MM-YYYY cronologicamente (mais recente primeiro)."""
+    try:
+        return sorted(dates, key=lambda d: datetime.strptime(d, "%d-%m-%Y"), reverse=True)
+    except ValueError:
+        return sorted(dates, reverse=True)
+
+
+def get_evolution_data(corban: str | None) -> pd.DataFrame:
+    if not corban or not PASTA_ENVIADOS.exists():
+        return pd.DataFrame()
+    rows = []
+    for f_env in PASTA_ENVIADOS.glob(f"*_{corban}_*_enviados.csv"):
+        parts = f_env.stem.split("_")
+        if len(parts) < 3:
+            continue
+        date_str = parts[2]
+        try:
+            dt = datetime.strptime(date_str, "%d-%m-%Y")
+        except ValueError:
+            continue
+        n_env = len(read_csv(f_env))
+        n_conv = 0
+        if PASTA_CONVERTIDOS.exists():
+            for f_conv in PASTA_CONVERTIDOS.glob(f"*_{corban}_{date_str}_convertidos.csv"):
+                n_conv += len(read_csv(f_conv))
+        rows.append({
+            "_date": dt,
+            "Data": date_str,
+            "Enviados": n_env,
+            "Convertidos": n_conv,
+            "Taxa (%)": round(n_conv / n_env * 100, 1) if n_env else 0.0,
+        })
+    if not rows:
+        return pd.DataFrame()
+    return (
+        pd.DataFrame(rows)
+        .sort_values("_date")
+        .drop(columns=["_date"])
+        .reset_index(drop=True)
+    )
+
+
 # ── páginas ───────────────────────────────────────────────────────────────────
 
-def page_clientes(corban: str):
+def page_clientes(corban: str | None):
     st.header("Clientes", anchor=False)
     available = files_by_date(PASTA_ENVIADOS, corban, "enviados")
     if not available:
@@ -311,8 +410,13 @@ def page_clientes(corban: str):
 
     selected = st.selectbox(
         "Data de envio da base",
-        sorted(available.keys(), reverse=True),
+        _sort_dates(list(available.keys())),
     )
+
+    # Marca base como vista (apenas para corbans, não para admin)
+    if corban and not st.session_state.get("is_admin"):
+        latest = _sort_dates(list(available.keys()))[0]
+        update_last_seen(corban, latest)
 
     df = (
         read_csv(available[selected])[["CPF", "NomeCliente", "Último Processamento"]]
@@ -325,6 +429,39 @@ def page_clientes(corban: str):
 
     df = df.fillna("")
     df["Nome do Cliente"] = df["Nome do Cliente"].apply(fmt_nome)
+
+    total = len(df)
+    st.markdown(f"""
+        <div style="
+            background: {DARK_CARD};
+            border: 1px solid {BORDER};
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin-bottom: 1rem;
+            display: flex;
+            gap: 2.5rem;
+            align-items: center;
+        ">
+            <div>
+                <div style="font-size:0.78rem; color:{MUTED}; margin-bottom:0.2rem;">
+                    Total de clientes
+                </div>
+                <div style="font-size:1.75rem; font-weight:700; color:{GOLD}; line-height:1;">
+                    {total}
+                </div>
+            </div>
+            <div style="width:1px; height:2.5rem; background:{BORDER};"></div>
+            <div>
+                <div style="font-size:0.78rem; color:{MUTED}; margin-bottom:0.2rem;">
+                    Data de envio
+                </div>
+                <div style="font-size:1.1rem; font-weight:600; line-height:1;">
+                    {selected}
+                </div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
     df_display = df.copy()
     df_display.index = range(1, len(df_display) + 1)
     st.dataframe(df_display, width="stretch", hide_index=False)
@@ -337,8 +474,30 @@ def page_clientes(corban: str):
     )
 
 
-def page_conversao(corban: str):
+def page_conversao(corban: str | None):
     st.header("Conversão", anchor=False)
+
+    evo = get_evolution_data(corban)
+    if not evo.empty:
+        st.subheader("Evolução por Lote", anchor=False)
+        chart = (
+            alt.Chart(evo)
+            .mark_bar(color=GOLD, opacity=0.85)
+            .encode(
+                x=alt.X("Data:O", sort=None, title="Data de envio"),
+                y=alt.Y("Taxa (%):Q", title="Taxa (%)"),
+                tooltip=[
+                    alt.Tooltip("Data:O", title="Data"),
+                    alt.Tooltip("Enviados:Q", title="Enviados"),
+                    alt.Tooltip("Convertidos:Q", title="Convertidos"),
+                    alt.Tooltip("Taxa (%):Q", title="Taxa (%)", format=".1f"),
+                ],
+            )
+            .properties(height=220)
+        )
+        st.altair_chart(chart, use_container_width=True)
+        st.divider()
+
     available_conv = files_by_date(PASTA_CONVERTIDOS, corban, "convertidos")
     if not available_conv:
         if st.session_state.get("is_admin"):
@@ -353,7 +512,7 @@ def page_conversao(corban: str):
 
     selected = st.selectbox(
         "Data de envio da base",
-        sorted(available_conv.keys(), reverse=True),
+        _sort_dates(list(available_conv.keys())),
     )
 
     df_conv = read_csv(available_conv[selected])
@@ -563,6 +722,75 @@ def page_como_usar():
     """, unsafe_allow_html=True)
 
 
+def page_dashboard():
+    st.header("Dashboard", anchor=False)
+
+    ranking = calcular_ranking()
+    total_env  = sum(r["enviados"]    for r in ranking)
+    total_conv = sum(r["convertidos"] for r in ranking)
+    taxa_geral = total_conv / total_env * 100 if total_env else 0.0
+
+    # ── métricas globais ──────────────────────────────────────────
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric("Total Enviados", f"{total_env:,}".replace(",", "."))
+    with c2:
+        st.metric("Total Convertidos", f"{total_conv:,}".replace(",", "."))
+    with c3:
+        st.metric("Taxa Geral", f"{taxa_geral:.1f}%")
+
+    st.divider()
+
+    # ── ranking completo ──────────────────────────────────────────
+    st.subheader("Ranking de Conversão", anchor=False)
+    if not ranking:
+        st.info("Nenhum dado disponível.")
+    else:
+        medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+        rows = []
+        for i, r in enumerate(ranking, 1):
+            rows.append({
+                "#": i,
+                "": medals.get(i, ""),
+                "Promotora": CORBAN_NAMES.get(r["corban"], r["corban"]),
+                "Enviados": r["enviados"],
+                "Convertidos": r["convertidos"],
+                "Taxa (%)": f"{r['taxa'] * 100:.1f}%",
+            })
+        df_rank = pd.DataFrame(rows)
+        df_rank.index = df_rank["#"]
+        df_rank = df_rank.drop(columns=["#"])
+        st.dataframe(df_rank, use_container_width=True, hide_index=False)
+
+    st.divider()
+
+    # ── histórico de acessos ──────────────────────────────────────
+    st.subheader("Último Acesso por Promotora", anchor=False)
+    access_log = _load_json(DATA_DIR / "access_log.json", {})
+
+    corban_log = {
+        u: info for u, info in access_log.items()
+        if not load_users().get(u, {}).get("is_admin", False)
+    }
+
+    if not corban_log:
+        st.info("Nenhum acesso de promotora registrado ainda.")
+    else:
+        log_rows = []
+        for username, info in sorted(corban_log.items()):
+            try:
+                dt = datetime.fromisoformat(info["last_access"])
+                dt_fmt = dt.strftime("%d/%m/%Y às %H:%M")
+            except Exception:
+                dt_fmt = info.get("last_access", "—")
+            log_rows.append({
+                "Promotora": info.get("display_name", username),
+                "Último Acesso": dt_fmt,
+            })
+        df_log = pd.DataFrame(log_rows)
+        st.dataframe(df_log, use_container_width=True, hide_index=True)
+
+
 # ── entry point ───────────────────────────────────────────────────────────────
 
 def main():
@@ -610,10 +838,12 @@ def main():
             if not corbans:
                 corban = None
             st.divider()
+            menu = ["Dashboard", "Clientes", "Conversão", "Upload"]
         else:
             corban = st.session_state["corban"]
+            clientes_label = "Clientes ●" if has_new_base(corban) else "Clientes"
+            menu = [clientes_label, "Conversão", "Ranking", "Como Usar"]
 
-        menu = ["Clientes", "Conversão"] + (["Upload"] if is_admin else ["Ranking", "Como Usar"])
         page = st.radio("Menu", menu, label_visibility="collapsed")
         st.divider()
         if st.button("Sair", width="stretch"):
@@ -654,7 +884,7 @@ def main():
             </script>
         """, height=0, scrolling=False)
 
-    if page == "Clientes":
+    if page in ("Clientes", "Clientes ●"):
         page_clientes(corban)
     elif page == "Conversão":
         page_conversao(corban)
@@ -662,6 +892,8 @@ def main():
         page_upload()
     elif page == "Ranking":
         page_ranking(corban)
+    elif page == "Dashboard":
+        page_dashboard()
     else:
         page_como_usar()
 
