@@ -251,6 +251,38 @@ def log_access(username: str, display_name: str):
     _save_json(path, log)
 
 
+def log_upload(filename: str):
+    path = DATA_DIR / "upload_log.json"
+    data = _load_json(path, {})
+    data[filename] = datetime.utcnow().isoformat(timespec="seconds")
+    _save_json(path, data)
+
+
+def get_latest_processamento(df: pd.DataFrame) -> str | None:
+    col = "Data e Hora do Processamento"
+    if col not in df.columns or df.empty:
+        return None
+    try:
+        dates = pd.to_datetime(df[col], format="%d/%m/%Y %H:%M:%S", errors="coerce").dropna()
+        if dates.empty:
+            return None
+        return dates.max().strftime("%d/%m/%Y às %H:%M")
+    except Exception:
+        return None
+
+
+def get_upload_time(filename: str) -> str | None:
+    data = _load_json(DATA_DIR / "upload_log.json", {})
+    ts = data.get(filename)
+    if not ts:
+        return None
+    try:
+        dt = datetime.fromisoformat(ts) - timedelta(hours=3)
+        return dt.strftime("%d/%m/%Y às %H:%M")
+    except Exception:
+        return None
+
+
 def update_last_seen(corban: str, date_str: str):
     path = DATA_DIR / "last_seen.json"
     data = _load_json(path, {})
@@ -449,6 +481,14 @@ def page_clientes(corban: str | None):
         </div>
     """, unsafe_allow_html=True)
 
+    enviado_em = get_latest_processamento(df)
+    if enviado_em:
+        st.markdown(
+            f"<p style='font-size:0.78rem; color:{MUTED}; margin:0 0 0.75rem 0;'>"
+            f"Enviado em {enviado_em}</p>",
+            unsafe_allow_html=True,
+        )
+
     df_display = df.copy()
     df_display.index = range(1, len(df_display) + 1)
     st.dataframe(df_display, width="stretch", hide_index=False)
@@ -511,6 +551,14 @@ def page_conversao(corban: str | None):
     if "Valor do Contrato" in df_conv.columns:
         df_conv["Valor do Contrato"] = df_conv["Valor do Contrato"].apply(fmt_brl)
 
+    upload_time = get_upload_time(available_conv[selected].name)
+    if upload_time:
+        st.markdown(
+            f"<p style='font-size:0.78rem; color:{MUTED}; margin:0 0 0.75rem 0;'>"
+            f"Atualizado em {upload_time}</p>",
+            unsafe_allow_html=True,
+        )
+
     df_conv_display = df_conv.copy()
     df_conv_display.index = range(1, len(df_conv_display) + 1)
     st.dataframe(df_conv_display, width="stretch", hide_index=False)
@@ -565,6 +613,7 @@ def page_upload():
             PASTA_ENVIADOS.mkdir(parents=True, exist_ok=True)
             for f in uploaded_env:
                 (PASTA_ENVIADOS / f.name).write_bytes(f.read())
+                log_upload(f.name)
             st.session_state.up_env_n += 1
             st.rerun()
 
@@ -583,6 +632,7 @@ def page_upload():
                 PASTA_CONVERTIDOS.mkdir(parents=True, exist_ok=True)
                 for f in uploaded_conv:
                     (PASTA_CONVERTIDOS / f.name).write_bytes(f.read())
+                    log_upload(f.name)
                 st.session_state.up_conv_n += 1
                 st.rerun()
         with bc2:
