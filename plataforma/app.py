@@ -284,9 +284,8 @@ def page_clientes(corban: str):
     df = df.fillna("")
     df["Nome do Cliente"] = df["Nome do Cliente"].apply(fmt_nome)
     df_display = df.copy()
-    df_display.insert(0, "#", [str(i) for i in range(1, len(df_display) + 1)])
-    st.dataframe(df_display, width="stretch", hide_index=True,
-                 column_config={"#": st.column_config.TextColumn("#", width=50)})
+    df_display.index = range(1, len(df_display) + 1)
+    st.dataframe(df_display, width="stretch", hide_index=False)
 
     st.download_button(
         "Baixar CSV",
@@ -346,9 +345,8 @@ def page_conversao(corban: str):
         df_conv["Valor do Contrato"] = df_conv["Valor do Contrato"].apply(fmt_brl)
 
     df_conv_display = df_conv.copy()
-    df_conv_display.insert(0, "#", [str(i) for i in range(1, len(df_conv_display) + 1)])
-    st.dataframe(df_conv_display, width="stretch", hide_index=True,
-                 column_config={"#": st.column_config.TextColumn("#", width=50)})
+    df_conv_display.index = range(1, len(df_conv_display) + 1)
+    st.dataframe(df_conv_display, width="stretch", hide_index=False)
 
     st.download_button(
         "Baixar CSV",
