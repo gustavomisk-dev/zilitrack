@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# dados sensíveis
+corban/
+esteira/
+plataforma/users.json
+
+# arquivos locais
+scripts/
+docs/
+CLAUDE.md
+plataforma/docs/
