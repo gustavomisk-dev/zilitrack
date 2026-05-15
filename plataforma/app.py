@@ -486,8 +486,20 @@ def get_all_corbans() -> list:
     return sorted(corbans)
 
 
+def _parse_valor(val) -> float:
+    try:
+        s = str(val).strip().replace("R$", "").strip()
+        if "," in s and "." in s:
+            s = s.replace(".", "").replace(",", ".")
+        elif "," in s:
+            s = s.replace(",", ".")
+        return float(s)
+    except (ValueError, TypeError):
+        return 0.0
+
+
 def calcular_ranking() -> list[dict]:
-    """Retorna lista ordenada por taxa de conversão desc: [{corban, enviados, convertidos, taxa}]"""
+    """Retorna lista ordenada por taxa de conversão desc: [{corban, enviados, convertidos, taxa, valor_total}]"""
     corbans = get_all_corbans()
     resultado = []
     for corban in corbans:
@@ -495,12 +507,21 @@ def calcular_ranking() -> list[dict]:
             len(read_csv(f)) for f in PASTA_ENVIADOS.glob(f"*_{corban}_*_enviados.csv")
         )
         convertidos = 0
+        valor_total = 0.0
         if PASTA_CONVERTIDOS.exists():
-            convertidos = sum(
-                len(read_csv(f)) for f in PASTA_CONVERTIDOS.glob(f"*_{corban}_*_convertidos.csv")
-            )
+            for f in PASTA_CONVERTIDOS.glob(f"*_{corban}_*_convertidos.csv"):
+                df = read_csv(f)
+                convertidos += len(df)
+                if "Valor Contratação" in df.columns:
+                    valor_total += df["Valor Contratação"].apply(_parse_valor).sum()
         taxa = convertidos / enviados if enviados else 0.0
-        resultado.append({"corban": corban, "enviados": enviados, "convertidos": convertidos, "taxa": taxa})
+        resultado.append({
+            "corban": corban,
+            "enviados": enviados,
+            "convertidos": convertidos,
+            "taxa": taxa,
+            "valor_total": valor_total,
+        })
     resultado.sort(key=lambda x: x["taxa"], reverse=True)
     return resultado
 
@@ -935,18 +956,21 @@ def page_dashboard():
     st.header("Dashboard", anchor=False)
 
     ranking = calcular_ranking()
-    total_env  = sum(r["enviados"]    for r in ranking)
-    total_conv = sum(r["convertidos"] for r in ranking)
-    taxa_geral = total_conv / total_env * 100 if total_env else 0.0
+    total_env   = sum(r["enviados"]    for r in ranking)
+    total_conv  = sum(r["convertidos"] for r in ranking)
+    taxa_geral  = total_conv / total_env * 100 if total_env else 0.0
+    valor_total = sum(r["valor_total"] for r in ranking)
 
     # ── métricas globais ──────────────────────────────────────────
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.metric("Total Enviados", f"{total_env:,}".replace(",", "."))
     with c2:
         st.metric("Total Convertidos", f"{total_conv:,}".replace(",", "."))
     with c3:
         st.metric("Taxa Geral", f"{taxa_geral:.1f}%")
+    with c4:
+        st.metric("Valor Total Convertido", fmt_brl(valor_total))
 
     st.divider()
 
@@ -965,6 +989,7 @@ def page_dashboard():
                 "Enviados": r["enviados"],
                 "Convertidos": r["convertidos"],
                 "Taxa (%)": f"{r['taxa'] * 100:.1f}%",
+                "Valor Convertido": fmt_brl(r["valor_total"]) if r["valor_total"] else "—",
             })
         df_rank = pd.DataFrame(rows)
         df_rank.index = df_rank["#"]
@@ -1026,7 +1051,11 @@ def page_dashboard():
                 unsafe_allow_html=True,
             )
         with c2:
-            btn_label = "Ver QR" if secret else "Ativar"
+            showing = st.session_state.get(f"show_qr_{uname}", False)
+            if secret:
+                btn_label = "Esconder QR Code" if showing else "Ver QR Code"
+            else:
+                btn_label = "Ativar"
             if st.button(btn_label, key=f"qr_{uname}", use_container_width=True):
                 if not secret:
                     secret = pyotp.random_base32()
