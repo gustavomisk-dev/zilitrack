@@ -488,13 +488,15 @@ def get_all_corbans() -> list:
 
 def _parse_valor(val) -> float:
     try:
-        s = str(val).strip().replace("R$", "").strip()
+        s = str(val).strip().replace("R$", "").replace("\xa0", "").strip()
+        if not s or s in ("-", "—"):
+            return 0.0
         if "," in s and "." in s:
             s = s.replace(".", "").replace(",", ".")
         elif "," in s:
             s = s.replace(",", ".")
         return float(s)
-    except (ValueError, TypeError):
+    except Exception:
         return 0.0
 
 
@@ -512,8 +514,12 @@ def calcular_ranking() -> list[dict]:
             for f in PASTA_CONVERTIDOS.glob(f"*_{corban}_*_convertidos.csv"):
                 df = read_csv(f)
                 convertidos += len(df)
-                if "Valor Contratação" in df.columns:
-                    valor_total += df["Valor Contratação"].apply(_parse_valor).sum()
+                col_valor = next((c for c in df.columns if "Valor" in c and "ontrat" in c), None)
+                if col_valor:
+                    try:
+                        valor_total += float(df[col_valor].apply(_parse_valor).sum())
+                    except Exception:
+                        pass
         taxa = convertidos / enviados if enviados else 0.0
         resultado.append({
             "corban": corban,
