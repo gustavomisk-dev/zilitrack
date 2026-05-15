@@ -1,10 +1,17 @@
 import altair as alt
+import base64
+import io
 import json
+import smtplib
 from datetime import datetime, timedelta, timezone
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 
 import bcrypt
 import pandas as pd
+import pyotp
+import qrcode
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -165,19 +172,24 @@ def load_users():
         return json.load(f)
 
 
-def login_page():
+def _login_header(subtitle: str):
     st.markdown(f"""
         <div style="text-align:center; margin-top:5rem; margin-bottom:2.5rem;">
             <h1 style="color:{GOLD}; font-size:2.8rem; font-weight:700;
                        letter-spacing:1px; margin-bottom:0.3rem;">
                 {APP_NAME}
             </h1>
-            <p style="color:{MUTED}; font-size:0.95rem; margin:0;">
-                Plataforma de Gestão de Propostas · ZiliCred
-            </p>
+            <p style="color:{MUTED}; font-size:0.95rem; margin:0;">{subtitle}</p>
         </div>
     """, unsafe_allow_html=True)
 
+
+def login_page():
+    if st.session_state.get("awaiting_2fa"):
+        _login_2fa()
+        return
+
+    _login_header("Plataforma de Gestão de Propostas · ZiliCred")
     _, col, _ = st.columns([1, 1, 1])
     with col:
         with st.form("login_form"):
@@ -202,15 +214,12 @@ def login_page():
                 pw_ok = False
             if pw_ok:
                 _login_attempts.pop(username, None)
-                log_access(username, user["display_name"])
-                st.session_state.update({
-                    "logged_in":      True,
-                    "corban":         user.get("corban"),
-                    "display_name":   user["display_name"],
-                    "is_admin":       user.get("is_admin", False),
-                    "expand_sidebar": True,
-                })
-                st.rerun()
+                if get_totp_secret(username):
+                    st.session_state["awaiting_2fa"] = True
+                    st.session_state["2fa_username"] = username
+                    st.rerun()
+                else:
+                    _complete_login(username, user)
             else:
                 attempt["count"] += 1
                 if attempt["count"] >= 3:
@@ -221,6 +230,49 @@ def login_page():
                         st.error("Usuário bloqueado por 1 hora após tentativas inválidas.")
                     else:
                         st.error("Usuário ou senha incorretos.")
+
+
+def _login_2fa():
+    _login_header("Verificação em dois fatores")
+    username = st.session_state["2fa_username"]
+    users    = load_users()
+    user     = users[username]
+
+    _, col, _ = st.columns([1, 1, 1])
+    with col:
+        with st.form("totp_form"):
+            code      = st.text_input("Código do autenticador", max_chars=6, placeholder="000000")
+            submitted = st.form_submit_button("Verificar", width="stretch")
+
+        if submitted:
+            if verify_totp(username, code):
+                st.session_state.pop("awaiting_2fa", None)
+                st.session_state.pop("2fa_username", None)
+                _complete_login(username, user)
+            else:
+                st.error("Código inválido. Tente novamente.")
+
+        st.markdown(
+            f"<p style='text-align:center; margin-top:1rem; font-size:0.85rem; color:{MUTED};'>"
+            f"Abra o Google Authenticator e insira o código de 6 dígitos.</p>",
+            unsafe_allow_html=True,
+        )
+        if st.button("← Voltar ao login", use_container_width=True):
+            st.session_state.pop("awaiting_2fa", None)
+            st.session_state.pop("2fa_username", None)
+            st.rerun()
+
+
+def _complete_login(username: str, user: dict):
+    log_access(username, user["display_name"])
+    st.session_state.update({
+        "logged_in":      True,
+        "corban":         user.get("corban"),
+        "display_name":   user["display_name"],
+        "is_admin":       user.get("is_admin", False),
+        "expand_sidebar": True,
+    })
+    st.rerun()
 
 
 # ── persistência ──────────────────────────────────────────────────────────────
@@ -239,6 +291,72 @@ def _save_json(path: Path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+# ── TOTP ──────────────────────────────────────────────────────────────────────
+
+def get_totp_secret(username: str) -> str | None:
+    return _load_json(DATA_DIR / "totp_secrets.json", {}).get(username)
+
+
+def set_totp_secret(username: str, secret: str):
+    path = DATA_DIR / "totp_secrets.json"
+    data = _load_json(path, {})
+    data[username] = secret
+    _save_json(path, data)
+
+
+def verify_totp(username: str, code: str) -> bool:
+    secret = get_totp_secret(username)
+    if not secret:
+        return False
+    return pyotp.TOTP(secret).verify(code.strip(), valid_window=1)
+
+
+def generate_qr_html(username: str, secret: str) -> str:
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(username, issuer_name=APP_NAME)
+    qr = qrcode.QRCode(box_size=6, border=2)
+    qr.add_data(uri)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="#0F0F0F", back_color="white")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    return f'<img src="data:image/png;base64,{b64}" style="border-radius:8px; width:180px;">'
+
+
+# ── e-mail ─────────────────────────────────────────────────────────────────────
+
+def send_upload_notification(corbans_notificados: list[str]):
+    try:
+        smtp_cfg = st.secrets.get("smtp", {})
+        if not smtp_cfg or not smtp_cfg.get("user"):
+            return
+        app_url = st.secrets.get("app", {}).get("url", "https://zilitrack.streamlit.app")
+        users = load_users()
+        for corban in corbans_notificados:
+            user = users.get(corban, {})
+            email = user.get("email")
+            if not email:
+                continue
+            nome = user.get("display_name", corban)
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = f"Nova base disponível · {APP_NAME}"
+            msg["From"]    = f"{APP_NAME} <{smtp_cfg['user']}>"
+            msg["To"]      = email
+            corpo = (
+                f"Olá, {nome}!\n\n"
+                f"Uma nova base de clientes está disponível na plataforma {APP_NAME}.\n\n"
+                f"Acesse agora: {app_url}\n\n"
+                f"— ZiliCred"
+            )
+            msg.attach(MIMEText(corpo, "plain", "utf-8"))
+            with smtplib.SMTP(smtp_cfg.get("host", "smtp.gmail.com"), int(smtp_cfg.get("port", 587))) as srv:
+                srv.starttls()
+                srv.login(smtp_cfg["user"], smtp_cfg["password"])
+                srv.sendmail(smtp_cfg["user"], email, msg.as_string())
+    except Exception:
+        pass
 
 
 def log_access(username: str, display_name: str):
@@ -642,9 +760,14 @@ def page_upload():
         )
         if uploaded_env and st.button("Salvar", key="btn_env"):
             PASTA_ENVIADOS.mkdir(parents=True, exist_ok=True)
+            corbans_salvos = set()
             for f in uploaded_env:
                 (PASTA_ENVIADOS / f.name).write_bytes(f.read())
                 log_upload(f.name)
+                parts = Path(f.name).stem.split("_")
+                if len(parts) >= 2:
+                    corbans_salvos.add(parts[1])
+            send_upload_notification(list(corbans_salvos))
             st.session_state.up_env_n += 1
             st.rerun()
 
@@ -875,6 +998,61 @@ def page_dashboard():
             })
         df_log = pd.DataFrame(log_rows)
         st.dataframe(df_log, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # ── configuração de 2FA ───────────────────────────────────────
+    st.subheader("Autenticação em Dois Fatores (2FA)", anchor=False)
+    st.markdown(
+        f"<p style='font-size:0.85rem; color:{MUTED}; margin-bottom:1rem;'>"
+        "Gerencie os códigos de autenticação para cada usuário. "
+        "Após gerar, o usuário deve escanear o QR code no Google Authenticator.</p>",
+        unsafe_allow_html=True,
+    )
+
+    users_2fa = load_users()
+    for uname, udata in sorted(users_2fa.items()):
+        secret = get_totp_secret(uname)
+        display = udata.get("display_name", uname)
+        status_html = (
+            f"<span style='color:#4ADE80; font-size:0.8rem;'>● Ativo</span>"
+            if secret else
+            f"<span style='color:{MUTED}; font-size:0.8rem;'>○ Não configurado</span>"
+        )
+        c1, c2, c3 = st.columns([4, 1, 1])
+        with c1:
+            st.markdown(
+                f"<span style='font-weight:600;'>{display}</span> &nbsp; {status_html}",
+                unsafe_allow_html=True,
+            )
+        with c2:
+            btn_label = "Ver QR" if secret else "Ativar"
+            if st.button(btn_label, key=f"qr_{uname}", use_container_width=True):
+                if not secret:
+                    secret = pyotp.random_base32()
+                    set_totp_secret(uname, secret)
+                toggle = f"show_qr_{uname}"
+                st.session_state[toggle] = not st.session_state.get(toggle, False)
+                st.rerun()
+        with c3:
+            if secret and st.button("Revogar", key=f"rev_{uname}", use_container_width=True):
+                data = _load_json(DATA_DIR / "totp_secrets.json", {})
+                data.pop(uname, None)
+                _save_json(DATA_DIR / "totp_secrets.json", data)
+                st.session_state.pop(f"show_qr_{uname}", None)
+                st.rerun()
+
+        if st.session_state.get(f"show_qr_{uname}") and secret:
+            qc1, qc2 = st.columns([1, 3])
+            with qc1:
+                st.markdown(generate_qr_html(uname, secret), unsafe_allow_html=True)
+            with qc2:
+                st.markdown(
+                    f"<p style='font-size:0.82rem; color:{MUTED}; margin-bottom:0.4rem;'>"
+                    f"Escaneie com o Google Authenticator ou insira a chave manualmente:</p>",
+                    unsafe_allow_html=True,
+                )
+                st.code(secret, language=None)
 
 
 # ── entry point ───────────────────────────────────────────────────────────────
