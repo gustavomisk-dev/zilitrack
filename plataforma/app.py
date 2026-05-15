@@ -1089,6 +1089,8 @@ def page_dashboard():
                 )
                 st.code(secret, language=None)
 
+        st.markdown("<div style='margin-bottom:1rem;'></div>", unsafe_allow_html=True)
+
 
 # ── entry point ───────────────────────────────────────────────────────────────
 
