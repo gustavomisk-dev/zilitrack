@@ -135,8 +135,10 @@ div[data-baseweb="select"] > div:focus-within {{
     font-weight: 600 !important;
 }}
 
-/* ── resize handle da sidebar ────────────────────────────────── */
+/* ── resize handle e botão de recolher sidebar ───────────────── */
 [data-testid="stSidebarResizeHandle"] {{ display: none !important; }}
+[data-testid="collapsedControl"] {{ display: none !important; }}
+[data-testid="stSidebarCollapsedControl"] {{ display: none !important; }}
 
 /* ── divisor ─────────────────────────────────────────────────── */
 hr {{ border-color: {BORDER} !important; }}
