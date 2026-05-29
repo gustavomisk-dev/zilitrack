@@ -135,6 +135,9 @@ div[data-baseweb="select"] > div:focus-within {{
     font-weight: 600 !important;
 }}
 
+/* ── resize handle da sidebar ────────────────────────────────── */
+[data-testid="stSidebarResizeHandle"] {{ display: none !important; }}
+
 /* ── divisor ─────────────────────────────────────────────────── */
 hr {{ border-color: {BORDER} !important; }}
 
