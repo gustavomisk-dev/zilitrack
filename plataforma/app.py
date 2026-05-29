@@ -184,6 +184,15 @@ def _login_header(subtitle: str):
     """, unsafe_allow_html=True)
 
 
+def find_user_by_email(email: str) -> tuple[str, dict] | tuple[None, None]:
+    users = load_users()
+    email = email.strip().lower()
+    for username, data in users.items():
+        if data.get("email", "").strip().lower() == email:
+            return username, data
+    return None, None
+
+
 def login_page():
     if st.session_state.get("awaiting_2fa"):
         _login_2fa()
@@ -193,27 +202,26 @@ def login_page():
     _, col, _ = st.columns([1, 1, 1])
     with col:
         with st.form("login_form"):
-            username  = st.text_input("Usuário")
-            password  = st.text_input("Senha", type="password")
-            submitted = st.form_submit_button("Entrar", width="stretch")
+            email_input = st.text_input("E-mail")
+            password    = st.text_input("Senha", type="password")
+            submitted   = st.form_submit_button("Entrar", width="stretch")
 
     if submitted:
-        attempt = _login_attempts.get(username, {"count": 0, "blocked_until": None})
+        username, user = find_user_by_email(email_input)
+        attempt = _login_attempts.get(email_input, {"count": 0, "blocked_until": None})
         blocked_until = attempt["blocked_until"]
 
         if blocked_until and datetime.now() < blocked_until:
             remaining = int((blocked_until - datetime.now()).total_seconds() / 60)
             with col:
-                st.error(f"Usuário bloqueado por tentativas inválidas. Tente novamente em {remaining} minuto(s).")
+                st.error(f"Acesso bloqueado por tentativas inválidas. Tente novamente em {remaining} minuto(s).")
         else:
-            users = load_users()
-            user  = users.get(username)
             try:
                 pw_ok = user is not None and bcrypt.checkpw(password.encode(), user["password"].encode())
             except Exception:
                 pw_ok = False
             if pw_ok:
-                _login_attempts.pop(username, None)
+                _login_attempts.pop(email_input, None)
                 if get_totp_secret(username):
                     st.session_state["awaiting_2fa"] = True
                     st.session_state["2fa_username"] = username
@@ -224,42 +232,80 @@ def login_page():
                 attempt["count"] += 1
                 if attempt["count"] >= 3:
                     attempt["blocked_until"] = datetime.now() + timedelta(hours=1)
-                _login_attempts[username] = attempt
+                _login_attempts[email_input] = attempt
                 with col:
                     if attempt["count"] >= 3:
-                        st.error("Usuário bloqueado por 1 hora após tentativas inválidas.")
+                        st.error("Acesso bloqueado por 1 hora após tentativas inválidas.")
                     else:
-                        st.error("Usuário ou senha incorretos.")
+                        st.error("E-mail ou senha incorretos.")
+
+
+def _2fa_cleanup():
+    for k in ["awaiting_2fa", "2fa_username", "2fa_method", "email_otp_sent"]:
+        st.session_state.pop(k, None)
 
 
 def _login_2fa():
-    _login_header("Verificação em dois fatores")
     username = st.session_state["2fa_username"]
     users    = load_users()
     user     = users[username]
+    method   = st.session_state.get("2fa_method", "totp")
+    has_email = bool(user.get("email")) and bool(st.secrets.get("smtp", {}).get("user"))
 
+    _login_header("Verificação em dois fatores")
     _, col, _ = st.columns([1, 1, 1])
+
     with col:
-        with st.form("totp_form"):
-            code      = st.text_input("Código do autenticador", max_chars=6, placeholder="000000")
-            submitted = st.form_submit_button("Verificar", width="stretch")
+        if method == "totp":
+            with st.form("totp_form"):
+                code      = st.text_input("Código do autenticador", max_chars=6, placeholder="000000")
+                submitted = st.form_submit_button("Verificar", width="stretch")
+            if submitted:
+                if verify_totp(username, code):
+                    _2fa_cleanup()
+                    _complete_login(username, user)
+                else:
+                    st.error("Código inválido. Tente novamente.")
+            st.markdown(
+                f"<p style='text-align:center; margin-top:0.75rem; font-size:0.85rem; color:{MUTED};'>"
+                f"Abra o Google Authenticator e insira o código de 6 dígitos.</p>",
+                unsafe_allow_html=True,
+            )
+            if has_email:
+                st.markdown("<div style='margin-top:0.5rem;'></div>", unsafe_allow_html=True)
+                if st.button("Receber código por e-mail", use_container_width=True):
+                    ok = generate_email_otp(username)
+                    if ok:
+                        st.session_state["2fa_method"]    = "email"
+                        st.session_state["email_otp_sent"] = True
+                        st.rerun()
+                    else:
+                        st.error("Não foi possível enviar o e-mail. Contate o administrador.")
 
-        if submitted:
-            if verify_totp(username, code):
-                st.session_state.pop("awaiting_2fa", None)
-                st.session_state.pop("2fa_username", None)
-                _complete_login(username, user)
-            else:
-                st.error("Código inválido. Tente novamente.")
+        else:  # method == "email"
+            email_masked = _mask_email(user.get("email", ""))
+            st.info(f"Código enviado para **{email_masked}**. Válido por 10 minutos.")
+            with st.form("email_otp_form"):
+                code      = st.text_input("Código recebido por e-mail", max_chars=6, placeholder="000000")
+                submitted = st.form_submit_button("Verificar", width="stretch")
+            if submitted:
+                if verify_email_otp(username, code):
+                    _2fa_cleanup()
+                    _complete_login(username, user)
+                else:
+                    st.error("Código inválido ou expirado.")
+            st.markdown("<div style='margin-top:0.5rem;'></div>", unsafe_allow_html=True)
+            if st.button("Reenviar código", use_container_width=True):
+                generate_email_otp(username)
+                st.toast("Código reenviado.")
+            if st.button("← Usar Google Authenticator", use_container_width=True):
+                st.session_state["2fa_method"] = "totp"
+                st.session_state.pop("email_otp_sent", None)
+                st.rerun()
 
-        st.markdown(
-            f"<p style='text-align:center; margin-top:1rem; font-size:0.85rem; color:{MUTED};'>"
-            f"Abra o Google Authenticator e insira o código de 6 dígitos.</p>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("<div style='margin-top:0.25rem;'></div>", unsafe_allow_html=True)
         if st.button("← Voltar ao login", use_container_width=True):
-            st.session_state.pop("awaiting_2fa", None)
-            st.session_state.pop("2fa_username", None)
+            _2fa_cleanup()
             st.rerun()
 
 
@@ -296,7 +342,10 @@ def _save_json(path: Path, data):
 # ── TOTP ──────────────────────────────────────────────────────────────────────
 
 def get_totp_secret(username: str) -> str | None:
-    return _load_json(DATA_DIR / "totp_secrets.json", {}).get(username)
+    secret = _load_json(DATA_DIR / "totp_secrets.json", {}).get(username)
+    if secret:
+        return secret
+    return load_users().get(username, {}).get("totp_secret")
 
 
 def set_totp_secret(username: str, secret: str):
@@ -323,6 +372,70 @@ def generate_qr_html(username: str, secret: str) -> str:
     img.save(buf, format="PNG")
     b64 = base64.b64encode(buf.getvalue()).decode()
     return f'<img src="data:image/png;base64,{b64}" style="border-radius:8px; width:180px;">'
+
+
+# ── OTP por e-mail ────────────────────────────────────────────────────────────
+
+def _mask_email(email: str) -> str:
+    if "@" not in email:
+        return "***"
+    local, domain = email.split("@", 1)
+    return local[:2] + "***@" + domain
+
+
+def generate_email_otp(username: str) -> bool:
+    import secrets as _secrets
+    users = load_users()
+    email = users.get(username, {}).get("email")
+    if not email:
+        return False
+    try:
+        smtp_cfg = st.secrets.get("smtp", {})
+        if not smtp_cfg or not smtp_cfg.get("user"):
+            return False
+        code    = f"{_secrets.randbelow(1000000):06d}"
+        expires = (datetime.utcnow() + timedelta(minutes=10)).isoformat(timespec="seconds")
+        path    = DATA_DIR / "email_otp.json"
+        data    = _load_json(path, {})
+        data[username] = {"code": code, "expires": expires}
+        _save_json(path, data)
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"Código de verificação · {APP_NAME}"
+        msg["From"]    = f"{APP_NAME} <{smtp_cfg['user']}>"
+        msg["To"]      = email
+        corpo = (
+            f"Seu código de verificação é:\n\n"
+            f"    {code}\n\n"
+            f"Válido por 10 minutos.\n"
+            f"Se você não solicitou este código, ignore este e-mail.\n\n"
+            f"— ZiliCred"
+        )
+        msg.attach(MIMEText(corpo, "plain", "utf-8"))
+        with smtplib.SMTP(smtp_cfg.get("host", "smtp.gmail.com"), int(smtp_cfg.get("port", 587))) as srv:
+            srv.starttls()
+            srv.login(smtp_cfg["user"], smtp_cfg["password"])
+            srv.sendmail(smtp_cfg["user"], email, msg.as_string())
+        return True
+    except Exception:
+        return False
+
+
+def verify_email_otp(username: str, code: str) -> bool:
+    path  = DATA_DIR / "email_otp.json"
+    data  = _load_json(path, {})
+    entry = data.get(username)
+    if not entry:
+        return False
+    try:
+        if datetime.utcnow() > datetime.fromisoformat(entry["expires"]):
+            return False
+        if entry["code"] == code.strip():
+            data.pop(username)
+            _save_json(path, data)
+            return True
+    except Exception:
+        pass
+    return False
 
 
 # ── e-mail ─────────────────────────────────────────────────────────────────────
@@ -1046,7 +1159,7 @@ def page_dashboard():
         secret = get_totp_secret(uname)
         display = udata.get("display_name", uname)
         status_html = (
-            f"<span style='color:#4ADE80; font-size:0.8rem;'>● Ativo</span>"
+            "<span style='color:#4ADE80; font-size:0.8rem;'>● Ativo</span>"
             if secret else
             f"<span style='color:{MUTED}; font-size:0.8rem;'>○ Não configurado</span>"
         )

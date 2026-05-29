@@ -18,6 +18,7 @@ corban/
 esteira/
 plataforma/users.json
 scripts/
+convertidos_*.csv
 docs/
 CLAUDE.md
 plataforma/docs/
