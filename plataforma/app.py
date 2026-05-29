@@ -135,10 +135,16 @@ div[data-baseweb="select"] > div:focus-within {{
     font-weight: 600 !important;
 }}
 
-/* ── resize handle e botão de recolher sidebar ───────────────── */
+/* ── remove gap entre sidebar e conteúdo ─────────────────────── */
 [data-testid="stSidebarResizeHandle"] {{ display: none !important; }}
 [data-testid="collapsedControl"] {{ display: none !important; }}
 [data-testid="stSidebarCollapsedControl"] {{ display: none !important; }}
+[data-testid="stAppViewContainer"] > section.main {{
+    padding-left: 0 !important;
+}}
+[data-testid="stMain"] {{
+    padding-left: 0 !important;
+}}
 
 /* ── divisor ─────────────────────────────────────────────────── */
 hr {{ border-color: {BORDER} !important; }}
@@ -331,7 +337,7 @@ def generate_email_otp(username: str) -> bool:
         if not smtp_cfg or not smtp_cfg.get("user"):
             return False
         code    = f"{_secrets.randbelow(1000000):06d}"
-        expires = (datetime.utcnow() + timedelta(minutes=10)).isoformat(timespec="seconds")
+        expires = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=10)).isoformat(timespec="seconds")
         path    = DATA_DIR / "email_otp.json"
         data    = _load_json(path, {})
         data[username] = {"code": code, "expires": expires}
@@ -364,7 +370,7 @@ def verify_email_otp(username: str, code: str) -> bool:
     if not entry:
         return False
     try:
-        if datetime.utcnow() > datetime.fromisoformat(entry["expires"]):
+        if datetime.now(timezone.utc).replace(tzinfo=None) > datetime.fromisoformat(entry["expires"]):
             return False
         if entry["code"] == code.strip():
             data.pop(username)
@@ -422,7 +428,7 @@ def generate_download_otp(username: str) -> bool:
         if not smtp_cfg or not smtp_cfg.get("user"):
             return False
         code    = f"{_secrets.randbelow(1000000):06d}"
-        expires = (datetime.utcnow() + timedelta(minutes=10)).isoformat(timespec="seconds")
+        expires = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=10)).isoformat(timespec="seconds")
         path    = DATA_DIR / "download_otp.json"
         data    = _load_json(path, {})
         data[username] = {"code": code, "expires": expires}
@@ -453,7 +459,7 @@ def verify_download_otp(username: str, code: str) -> bool:
     if not entry:
         return False
     try:
-        if datetime.utcnow() > datetime.fromisoformat(entry["expires"]):
+        if datetime.now(timezone.utc).replace(tzinfo=None) > datetime.fromisoformat(entry["expires"]):
             return False
         if entry["code"] == code.strip():
             data.pop(username)
@@ -588,7 +594,7 @@ def log_access(username: str, display_name: str):
 def log_upload(filename: str):
     path = DATA_DIR / "upload_log.json"
     data = _load_json(path, {})
-    data[filename] = datetime.utcnow().isoformat(timespec="seconds")
+    data[filename] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
     _save_json(path, data)
 
 
