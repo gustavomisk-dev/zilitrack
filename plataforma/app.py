@@ -515,13 +515,13 @@ def _render_download_seguro(username: str, page: str, selected: str,
 
     if dl.get("key") == key and dl.get("step") == "ready":
         st.success("Senha enviada por e-mail. Use-a para abrir o arquivo Excel.")
-        st.download_button(
+        clicked = st.download_button(
             "Baixar arquivo",
             data=dl["xl_bytes"],
             file_name=dl["filename"],
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-        if st.button("Cancelar", key=f"dl_cancel_{key}"):
+        if clicked:
             st.session_state.pop("dl_state", None)
             st.rerun()
 
