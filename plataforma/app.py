@@ -493,31 +493,33 @@ def send_file_password_email(username: str, password: str, filename: str):
         pass
 
 
-def create_encrypted_zip(csv_bytes: bytes, filename: str, password: str) -> bytes:
+def create_encrypted_excel(df: pd.DataFrame, password: str) -> bytes:
     import io
-    import pyzipper
-    buf = io.BytesIO()
-    with pyzipper.AESZipFile(buf, "w", compression=pyzipper.ZIP_DEFLATED,
-                              encryption=pyzipper.WZ_AES) as zf:
-        zf.setpassword(password.encode())
-        zf.writestr(filename, csv_bytes)
-    buf.seek(0)
-    return buf.read()
+    import msoffcrypto
+    excel_buf = io.BytesIO()
+    df.to_excel(excel_buf, index=False)
+    excel_buf.seek(0)
+    encrypted_buf = io.BytesIO()
+    office_file = msoffcrypto.OfficeFile(excel_buf)
+    office_file.encrypt(password, encrypted_buf)
+    encrypted_buf.seek(0)
+    return encrypted_buf.read()
 
 
 def _render_download_seguro(username: str, page: str, selected: str,
-                             csv_bytes: bytes, csv_filename: str):
-    """Renderiza o fluxo de download com OTP + ZIP criptografado."""
-    key = f"{page}_{selected}"
-    dl  = st.session_state.get("dl_state", {})
+                             df: pd.DataFrame, base_filename: str):
+    """Renderiza o fluxo de download com OTP + Excel criptografado."""
+    key      = f"{page}_{selected}"
+    dl       = st.session_state.get("dl_state", {})
+    xl_name  = base_filename.replace(".csv", ".xlsx")
 
     if dl.get("key") == key and dl.get("step") == "ready":
-        st.success("Senha enviada por e-mail. Use-a para abrir o arquivo após o download.")
+        st.success("Senha enviada por e-mail. Use-a para abrir o arquivo Excel.")
         st.download_button(
             "Baixar arquivo",
-            data=dl["zip_bytes"],
+            data=dl["xl_bytes"],
             file_name=dl["filename"],
-            mime="application/zip",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
         if st.button("Cancelar", key=f"dl_cancel_{key}"):
             st.session_state.pop("dl_state", None)
@@ -532,13 +534,12 @@ def _render_download_seguro(username: str, page: str, selected: str,
             submitted = st.form_submit_button("Confirmar download", width="stretch")
         if submitted:
             if verify_download_otp(username, code):
-                pwd      = generate_file_password()
-                zip_name = csv_filename.replace(".csv", ".zip")
-                zip_data = create_encrypted_zip(csv_bytes, csv_filename, pwd)
-                send_file_password_email(username, pwd, zip_name)
+                pwd     = generate_file_password()
+                xl_data = create_encrypted_excel(df, pwd)
+                send_file_password_email(username, pwd, xl_name)
                 st.session_state["dl_state"] = {
                     "key": key, "step": "ready",
-                    "zip_bytes": zip_data, "filename": zip_name,
+                    "xl_bytes": xl_data, "filename": xl_name,
                 }
                 st.rerun()
             else:
@@ -869,11 +870,7 @@ def page_clientes(corban: str | None):
         st.caption("Prévia do formato — dados reais disponíveis via download")
         st.dataframe(preview, use_container_width=True, hide_index=False)
         username = st.session_state.get("username", "")
-        _render_download_seguro(
-            username, "clientes", selected,
-            df.to_csv(index=False, sep=";").encode("utf-8-sig"),
-            f"clientes_{selected}.csv",
-        )
+        _render_download_seguro(username, "clientes", selected, df, f"clientes_{selected}.csv")
 
 
 def page_conversao(corban: str | None):
@@ -972,11 +969,7 @@ def page_conversao(corban: str | None):
         st.caption("Prévia do formato — dados reais disponíveis via download")
         st.dataframe(preview, use_container_width=True, hide_index=False)
         username = st.session_state.get("username", "")
-        _render_download_seguro(
-            username, "conversao", selected,
-            df_conv.to_csv(index=False, sep=";").encode("utf-8-sig"),
-            f"conversao_{selected}.csv",
-        )
+        _render_download_seguro(username, "conversao", selected, df_conv, f"conversao_{selected}.csv")
 
     evo = get_evolution_data(corban)
     if not evo.empty:
