@@ -378,19 +378,19 @@ def send_upload_notification(corbans_notificados: list[str]):
         if not smtp_cfg or not smtp_cfg.get("user"):
             return
         app_url = st.secrets.get("app", {}).get("url", "https://zilitrack.streamlit.app")
-        users = load_users()
-        for corban in corbans_notificados:
-            user = users.get(corban, {})
-            email = user.get("email")
-            if not email:
-                continue
-            nome = user.get("display_name", corban)
+        users   = load_users()
+        # Notifica todos os usuários cujo corban está na lista
+        destinatarios = [
+            u for u in users.values()
+            if u.get("corban") in corbans_notificados and u.get("email")
+        ]
+        for user in destinatarios:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = f"Nova base disponível · {APP_NAME}"
             msg["From"]    = f"{APP_NAME} <{smtp_cfg['user']}>"
-            msg["To"]      = email
+            msg["To"]      = user["email"]
             corpo = (
-                f"Olá, {nome}!\n\n"
+                f"Olá, {user.get('display_name', '')}!\n\n"
                 f"Uma nova base de clientes está disponível na plataforma {APP_NAME}.\n\n"
                 f"Acesse agora: {app_url}\n\n"
                 f"— ZiliCred"
@@ -399,7 +399,7 @@ def send_upload_notification(corbans_notificados: list[str]):
             with smtplib.SMTP(smtp_cfg.get("host", "smtp.gmail.com"), int(smtp_cfg.get("port", 587))) as srv:
                 srv.starttls()
                 srv.login(smtp_cfg["user"], smtp_cfg["password"])
-                srv.sendmail(smtp_cfg["user"], email, msg.as_string())
+                srv.sendmail(smtp_cfg["user"], user["email"], msg.as_string())
     except Exception:
         pass
 
@@ -482,7 +482,7 @@ def send_file_password_email(username: str, password: str, filename: str):
         corpo = (
             f"A senha para abrir o arquivo {filename} é:\n\n"
             f"    {password}\n\n"
-            f"Use esta senha ao abrir o arquivo ZIP baixado.\n\n— ZiliCred"
+            f"Use esta senha ao abrir o arquivo Excel baixado.\n\n— ZiliCred"
         )
         msg.attach(MIMEText(corpo, "plain", "utf-8"))
         with smtplib.SMTP(smtp_cfg.get("host", "smtp.gmail.com"), int(smtp_cfg.get("port", 587))) as srv:
@@ -1147,8 +1147,12 @@ def page_como_usar():
             Exibe a base de clientes enviada pela ZiliCred para a sua promotora.
             Use o seletor <b>Data de envio da base</b> para alternar entre lotes.
             O card no topo mostra o total de clientes e a data de envio do lote selecionado.
-            A tabela traz a data e hora do processamento, o CPF e o nome de cada cliente.
-            Clique em <b>Baixar CSV</b> para exportar a lista completa.
+            A tabela exibe uma prévia do formato — os dados reais são acessados via download.
+        </p>
+        <p>
+            Para baixar a lista completa, clique em <b>Solicitar download</b>. Um código
+            será enviado ao seu e-mail para autorizar o download. Após inserir o código,
+            o arquivo Excel será gerado e uma senha para abri-lo será enviada por e-mail.
         </p>
         <p>
             Quando houver um lote novo ainda não visualizado, o menu exibirá
@@ -1159,9 +1163,9 @@ def page_como_usar():
         <h4 style="color:{GOLD}; margin-top:1.5rem;">Conversão</h4>
         <p>
             Exibe os clientes da sua base que efetivaram um contrato com a ZiliCred.
-            Selecione o lote pela data de envio para visualizar CPF, nome,
-            data de processamento e valor do contrato.
-            Clique em <b>Baixar CSV</b> para exportar o relatório.
+            Selecione o lote pela data de envio para visualizar o resumo de conversões.
+            O download segue o mesmo fluxo da aba Clientes: código por e-mail para
+            autorizar, e senha por e-mail para abrir o arquivo Excel.
         </p>
         <p>
             Abaixo da tabela, o gráfico <b>Evolução por Lote</b> mostra a taxa de

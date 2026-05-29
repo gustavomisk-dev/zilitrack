@@ -15,6 +15,7 @@ venv/
 
 # Dados sensíveis e arquivos locais
 corban/
+corban-legado/
 esteira/
 plataforma/users.json
 scripts/
