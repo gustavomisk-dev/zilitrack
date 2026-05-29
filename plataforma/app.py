@@ -279,6 +279,7 @@ def _complete_login(username: str, user: dict):
     log_access(username, user["display_name"])
     st.session_state.update({
         "logged_in":      True,
+        "username":       username,
         "corban":         user.get("corban"),
         "display_name":   user["display_name"],
         "is_admin":       user.get("is_admin", False),
@@ -556,15 +557,15 @@ def _render_download_seguro(username: str, page: str, selected: str,
 
 
 _DUMMY_CLIENTES = pd.DataFrame([
-    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "111.111.111-11", "Nome do Cliente": "Nome Exemplo"},
-    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "222.222.222-22", "Nome do Cliente": "Nome Exemplo"},
-    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "333.333.333-33", "Nome do Cliente": "Nome Exemplo"},
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "111.111.111-11", "Nome do Cliente": "Nome Sobrenome"},
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "222.222.222-22", "Nome do Cliente": "Nome Sobrenome"},
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "333.333.333-33", "Nome do Cliente": "Nome Sobrenome"},
 ])
 
 _DUMMY_CONVERSAO = pd.DataFrame([
-    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "111.111.111-11", "Nome do Cliente": "Nome Exemplo", "Valor do Contrato": "R$ 0.000,00"},
-    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "222.222.222-22", "Nome do Cliente": "Nome Exemplo", "Valor do Contrato": "R$ 0.000,00"},
-    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "333.333.333-33", "Nome do Cliente": "Nome Exemplo", "Valor do Contrato": "R$ 0.000,00"},
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "111.111.111-11", "Nome do Cliente": "Nome Sobrenome", "Valor do Contrato": "R$ 0.000,00"},
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "222.222.222-22", "Nome do Cliente": "Nome Sobrenome", "Valor do Contrato": "R$ 0.000,00"},
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "333.333.333-33", "Nome do Cliente": "Nome Sobrenome", "Valor do Contrato": "R$ 0.000,00"},
 ])
 
 
@@ -867,7 +868,7 @@ def page_clientes(corban: str | None):
         preview.index = range(1, len(preview) + 1)
         st.caption("Prévia do formato — dados reais disponíveis via download")
         st.dataframe(preview, use_container_width=True, hide_index=False)
-        username = st.session_state.get("corban", "")
+        username = st.session_state.get("username", "")
         _render_download_seguro(
             username, "clientes", selected,
             df.to_csv(index=False, sep=";").encode("utf-8-sig"),
@@ -970,7 +971,7 @@ def page_conversao(corban: str | None):
         preview.index = range(1, len(preview) + 1)
         st.caption("Prévia do formato — dados reais disponíveis via download")
         st.dataframe(preview, use_container_width=True, hide_index=False)
-        username = st.session_state.get("corban", "")
+        username = st.session_state.get("username", "")
         _render_download_seguro(
             username, "conversao", selected,
             df_conv.to_csv(index=False, sep=";").encode("utf-8-sig"),
@@ -1349,7 +1350,7 @@ def main():
         page = st.radio("Menu", menu, label_visibility="collapsed")
         st.divider()
         if st.button("Sair", width="stretch"):
-            for key in ["logged_in", "corban", "display_name", "is_admin"]:
+            for key in ["logged_in", "username", "corban", "display_name", "is_admin", "dl_state"]:
                 st.session_state.pop(key, None)
             st.rerun()
 
