@@ -403,6 +403,171 @@ def send_upload_notification(corbans_notificados: list[str]):
         pass
 
 
+# ── download seguro ───────────────────────────────────────────────────────────
+
+def generate_download_otp(username: str) -> bool:
+    import secrets as _secrets
+    users = load_users()
+    email = users.get(username, {}).get("email")
+    if not email:
+        return False
+    try:
+        smtp_cfg = st.secrets.get("smtp", {})
+        if not smtp_cfg or not smtp_cfg.get("user"):
+            return False
+        code    = f"{_secrets.randbelow(1000000):06d}"
+        expires = (datetime.utcnow() + timedelta(minutes=10)).isoformat(timespec="seconds")
+        path    = DATA_DIR / "download_otp.json"
+        data    = _load_json(path, {})
+        data[username] = {"code": code, "expires": expires}
+        _save_json(path, data)
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"Código para download · {APP_NAME}"
+        msg["From"]    = f"{APP_NAME} <{smtp_cfg['user']}>"
+        msg["To"]      = email
+        corpo = (
+            f"Seu código para autorizar o download é:\n\n"
+            f"    {code}\n\n"
+            f"Válido por 10 minutos.\n\n— ZiliCred"
+        )
+        msg.attach(MIMEText(corpo, "plain", "utf-8"))
+        with smtplib.SMTP(smtp_cfg.get("host", "smtp.gmail.com"), int(smtp_cfg.get("port", 587))) as srv:
+            srv.starttls()
+            srv.login(smtp_cfg["user"], smtp_cfg["password"])
+            srv.sendmail(smtp_cfg["user"], email, msg.as_string())
+        return True
+    except Exception:
+        return False
+
+
+def verify_download_otp(username: str, code: str) -> bool:
+    path  = DATA_DIR / "download_otp.json"
+    data  = _load_json(path, {})
+    entry = data.get(username)
+    if not entry:
+        return False
+    try:
+        if datetime.utcnow() > datetime.fromisoformat(entry["expires"]):
+            return False
+        if entry["code"] == code.strip():
+            data.pop(username)
+            _save_json(path, data)
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def generate_file_password() -> str:
+    import secrets as _secrets
+    import string
+    alphabet = string.ascii_letters + string.digits
+    return "".join(_secrets.choice(alphabet) for _ in range(10))
+
+
+def send_file_password_email(username: str, password: str, filename: str):
+    try:
+        smtp_cfg = st.secrets.get("smtp", {})
+        if not smtp_cfg or not smtp_cfg.get("user"):
+            return
+        users = load_users()
+        email = users.get(username, {}).get("email")
+        if not email:
+            return
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"Senha do arquivo · {APP_NAME}"
+        msg["From"]    = f"{APP_NAME} <{smtp_cfg['user']}>"
+        msg["To"]      = email
+        corpo = (
+            f"A senha para abrir o arquivo {filename} é:\n\n"
+            f"    {password}\n\n"
+            f"Use esta senha ao abrir o arquivo ZIP baixado.\n\n— ZiliCred"
+        )
+        msg.attach(MIMEText(corpo, "plain", "utf-8"))
+        with smtplib.SMTP(smtp_cfg.get("host", "smtp.gmail.com"), int(smtp_cfg.get("port", 587))) as srv:
+            srv.starttls()
+            srv.login(smtp_cfg["user"], smtp_cfg["password"])
+            srv.sendmail(smtp_cfg["user"], email, msg.as_string())
+    except Exception:
+        pass
+
+
+def create_encrypted_zip(csv_bytes: bytes, filename: str, password: str) -> bytes:
+    import io
+    import pyzipper
+    buf = io.BytesIO()
+    with pyzipper.AESZipFile(buf, "w", compression=pyzipper.ZIP_DEFLATED,
+                              encryption=pyzipper.WZ_AES) as zf:
+        zf.setpassword(password.encode())
+        zf.writestr(filename, csv_bytes)
+    buf.seek(0)
+    return buf.read()
+
+
+def _render_download_seguro(username: str, page: str, selected: str,
+                             csv_bytes: bytes, csv_filename: str):
+    """Renderiza o fluxo de download com OTP + ZIP criptografado."""
+    key = f"{page}_{selected}"
+    dl  = st.session_state.get("dl_state", {})
+
+    if dl.get("key") == key and dl.get("step") == "ready":
+        st.success("Senha enviada por e-mail. Use-a para abrir o arquivo após o download.")
+        st.download_button(
+            "Baixar arquivo",
+            data=dl["zip_bytes"],
+            file_name=dl["filename"],
+            mime="application/zip",
+        )
+        if st.button("Cancelar", key=f"dl_cancel_{key}"):
+            st.session_state.pop("dl_state", None)
+            st.rerun()
+
+    elif dl.get("key") == key and dl.get("step") == "otp":
+        users        = load_users()
+        email_masked = _mask_email(users.get(username, {}).get("email", ""))
+        st.info(f"Código enviado para **{email_masked}**. Válido por 10 minutos.")
+        with st.form(f"dl_otp_{key}"):
+            code      = st.text_input("Código de verificação", max_chars=6, placeholder="000000")
+            submitted = st.form_submit_button("Confirmar download", width="stretch")
+        if submitted:
+            if verify_download_otp(username, code):
+                pwd      = generate_file_password()
+                zip_name = csv_filename.replace(".csv", ".zip")
+                zip_data = create_encrypted_zip(csv_bytes, csv_filename, pwd)
+                send_file_password_email(username, pwd, zip_name)
+                st.session_state["dl_state"] = {
+                    "key": key, "step": "ready",
+                    "zip_bytes": zip_data, "filename": zip_name,
+                }
+                st.rerun()
+            else:
+                st.error("Código inválido ou expirado.")
+        if st.button("Cancelar", key=f"dl_cancel_otp_{key}"):
+            st.session_state.pop("dl_state", None)
+            st.rerun()
+
+    else:
+        if st.button("Solicitar download", key=f"dl_btn_{key}"):
+            if generate_download_otp(username):
+                st.session_state["dl_state"] = {"key": key, "step": "otp"}
+                st.rerun()
+            else:
+                st.error("Erro ao enviar código. Verifique a configuração de e-mail.")
+
+
+_DUMMY_CLIENTES = pd.DataFrame([
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "111.111.111-11", "Nome do Cliente": "Nome Exemplo"},
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "222.222.222-22", "Nome do Cliente": "Nome Exemplo"},
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "333.333.333-33", "Nome do Cliente": "Nome Exemplo"},
+])
+
+_DUMMY_CONVERSAO = pd.DataFrame([
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "111.111.111-11", "Nome do Cliente": "Nome Exemplo", "Valor do Contrato": "R$ 0.000,00"},
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "222.222.222-22", "Nome do Cliente": "Nome Exemplo", "Valor do Contrato": "R$ 0.000,00"},
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "333.333.333-33", "Nome do Cliente": "Nome Exemplo", "Valor do Contrato": "R$ 0.000,00"},
+])
+
+
 def log_access(username: str, display_name: str):
     path = DATA_DIR / "access_log.json"
     log = _load_json(path, {})
@@ -687,16 +852,27 @@ def page_clientes(corban: str | None):
         </div>
     """, unsafe_allow_html=True)
 
-    df_display = df.copy()
-    df_display.index = range(1, len(df_display) + 1)
-    st.dataframe(df_display, width="stretch", hide_index=False)
-
-    st.download_button(
-        "Baixar CSV",
-        df.to_csv(index=False, sep=";").encode("utf-8-sig"),
-        file_name=f"clientes_{selected}.csv",
-        mime="text/csv",
-    )
+    if st.session_state.get("is_admin"):
+        df_display = df.copy()
+        df_display.index = range(1, len(df_display) + 1)
+        st.dataframe(df_display, width="stretch", hide_index=False)
+        st.download_button(
+            "Baixar CSV",
+            df.to_csv(index=False, sep=";").encode("utf-8-sig"),
+            file_name=f"clientes_{selected}.csv",
+            mime="text/csv",
+        )
+    else:
+        preview = _DUMMY_CLIENTES.copy()
+        preview.index = range(1, len(preview) + 1)
+        st.caption("Prévia do formato — dados reais disponíveis via download")
+        st.dataframe(preview, use_container_width=True, hide_index=False)
+        username = st.session_state.get("corban", "")
+        _render_download_seguro(
+            username, "clientes", selected,
+            df.to_csv(index=False, sep=";").encode("utf-8-sig"),
+            f"clientes_{selected}.csv",
+        )
 
 
 def page_conversao(corban: str | None):
@@ -779,16 +955,27 @@ def page_conversao(corban: str | None):
         </div>
     """, unsafe_allow_html=True)
 
-    df_conv_display = df_conv.copy()
-    df_conv_display.index = range(1, len(df_conv_display) + 1)
-    st.dataframe(df_conv_display, width="stretch", hide_index=False)
-
-    st.download_button(
-        "Baixar CSV",
-        df_conv.to_csv(index=False, sep=";").encode("utf-8-sig"),
-        file_name=f"conversao_{selected}.csv",
-        mime="text/csv",
-    )
+    if st.session_state.get("is_admin"):
+        df_conv_display = df_conv.copy()
+        df_conv_display.index = range(1, len(df_conv_display) + 1)
+        st.dataframe(df_conv_display, width="stretch", hide_index=False)
+        st.download_button(
+            "Baixar CSV",
+            df_conv.to_csv(index=False, sep=";").encode("utf-8-sig"),
+            file_name=f"conversao_{selected}.csv",
+            mime="text/csv",
+        )
+    else:
+        preview = _DUMMY_CONVERSAO.copy()
+        preview.index = range(1, len(preview) + 1)
+        st.caption("Prévia do formato — dados reais disponíveis via download")
+        st.dataframe(preview, use_container_width=True, hide_index=False)
+        username = st.session_state.get("corban", "")
+        _render_download_seguro(
+            username, "conversao", selected,
+            df_conv.to_csv(index=False, sep=";").encode("utf-8-sig"),
+            f"conversao_{selected}.csv",
+        )
 
     evo = get_evolution_data(corban)
     if not evo.empty:
