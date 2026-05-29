@@ -1,6 +1,4 @@
 import altair as alt
-import base64
-import io
 import json
 import smtplib
 from datetime import datetime, timedelta, timezone
@@ -10,8 +8,6 @@ from pathlib import Path
 
 import bcrypt
 import pandas as pd
-import pyotp
-import qrcode
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -222,10 +218,16 @@ def login_page():
                 pw_ok = False
             if pw_ok:
                 _login_attempts.pop(email_input, None)
-                if get_totp_secret(username):
-                    st.session_state["awaiting_2fa"] = True
-                    st.session_state["2fa_username"] = username
-                    st.rerun()
+                smtp_ok = bool(st.secrets.get("smtp", {}).get("user"))
+                if user.get("email") and smtp_ok:
+                    ok = generate_email_otp(username)
+                    if ok:
+                        st.session_state["awaiting_2fa"] = True
+                        st.session_state["2fa_username"] = username
+                        st.rerun()
+                    else:
+                        with col:
+                            st.error("Erro ao enviar código de verificação. Tente novamente.")
                 else:
                     _complete_login(username, user)
             else:
@@ -241,69 +243,33 @@ def login_page():
 
 
 def _2fa_cleanup():
-    for k in ["awaiting_2fa", "2fa_username", "2fa_method", "email_otp_sent"]:
+    for k in ["awaiting_2fa", "2fa_username"]:
         st.session_state.pop(k, None)
 
 
 def _login_2fa():
-    username = st.session_state["2fa_username"]
-    users    = load_users()
-    user     = users[username]
-    method   = st.session_state.get("2fa_method", "totp")
-    has_email = bool(user.get("email")) and bool(st.secrets.get("smtp", {}).get("user"))
+    username     = st.session_state["2fa_username"]
+    user         = load_users()[username]
+    email_masked = _mask_email(user.get("email", ""))
 
     _login_header("Verificação em dois fatores")
     _, col, _ = st.columns([1, 1, 1])
 
     with col:
-        if method == "totp":
-            with st.form("totp_form"):
-                code      = st.text_input("Código do autenticador", max_chars=6, placeholder="000000")
-                submitted = st.form_submit_button("Verificar", width="stretch")
-            if submitted:
-                if verify_totp(username, code):
-                    _2fa_cleanup()
-                    _complete_login(username, user)
-                else:
-                    st.error("Código inválido. Tente novamente.")
-            st.markdown(
-                f"<p style='text-align:center; margin-top:0.75rem; font-size:0.85rem; color:{MUTED};'>"
-                f"Abra o Google Authenticator e insira o código de 6 dígitos.</p>",
-                unsafe_allow_html=True,
-            )
-            if has_email:
-                st.markdown("<div style='margin-top:0.5rem;'></div>", unsafe_allow_html=True)
-                if st.button("Receber código por e-mail", use_container_width=True):
-                    ok = generate_email_otp(username)
-                    if ok:
-                        st.session_state["2fa_method"]    = "email"
-                        st.session_state["email_otp_sent"] = True
-                        st.rerun()
-                    else:
-                        st.error("Não foi possível enviar o e-mail. Contate o administrador.")
-
-        else:  # method == "email"
-            email_masked = _mask_email(user.get("email", ""))
-            st.info(f"Código enviado para **{email_masked}**. Válido por 10 minutos.")
-            with st.form("email_otp_form"):
-                code      = st.text_input("Código recebido por e-mail", max_chars=6, placeholder="000000")
-                submitted = st.form_submit_button("Verificar", width="stretch")
-            if submitted:
-                if verify_email_otp(username, code):
-                    _2fa_cleanup()
-                    _complete_login(username, user)
-                else:
-                    st.error("Código inválido ou expirado.")
-            st.markdown("<div style='margin-top:0.5rem;'></div>", unsafe_allow_html=True)
-            if st.button("Reenviar código", use_container_width=True):
-                generate_email_otp(username)
-                st.toast("Código reenviado.")
-            if st.button("← Usar Google Authenticator", use_container_width=True):
-                st.session_state["2fa_method"] = "totp"
-                st.session_state.pop("email_otp_sent", None)
-                st.rerun()
-
-        st.markdown("<div style='margin-top:0.25rem;'></div>", unsafe_allow_html=True)
+        st.info(f"Código enviado para **{email_masked}**. Válido por 10 minutos.")
+        with st.form("otp_form"):
+            code      = st.text_input("Código de verificação", max_chars=6, placeholder="000000")
+            submitted = st.form_submit_button("Verificar", width="stretch")
+        if submitted:
+            if verify_email_otp(username, code):
+                _2fa_cleanup()
+                _complete_login(username, user)
+            else:
+                st.error("Código inválido ou expirado.")
+        st.markdown("<div style='margin-top:0.5rem;'></div>", unsafe_allow_html=True)
+        if st.button("Reenviar código", use_container_width=True):
+            generate_email_otp(username)
+            st.toast("Código reenviado.")
         if st.button("← Voltar ao login", use_container_width=True):
             _2fa_cleanup()
             st.rerun()
@@ -337,41 +303,6 @@ def _save_json(path: Path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-
-
-# ── TOTP ──────────────────────────────────────────────────────────────────────
-
-def get_totp_secret(username: str) -> str | None:
-    secret = _load_json(DATA_DIR / "totp_secrets.json", {}).get(username)
-    if secret:
-        return secret
-    return load_users().get(username, {}).get("totp_secret")
-
-
-def set_totp_secret(username: str, secret: str):
-    path = DATA_DIR / "totp_secrets.json"
-    data = _load_json(path, {})
-    data[username] = secret
-    _save_json(path, data)
-
-
-def verify_totp(username: str, code: str) -> bool:
-    secret = get_totp_secret(username)
-    if not secret:
-        return False
-    return pyotp.TOTP(secret).verify(code.strip(), valid_window=1)
-
-
-def generate_qr_html(username: str, secret: str) -> str:
-    uri = pyotp.totp.TOTP(secret).provisioning_uri(username, issuer_name=APP_NAME)
-    qr = qrcode.QRCode(box_size=6, border=2)
-    qr.add_data(uri)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="#0F0F0F", back_color="white")
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    b64 = base64.b64encode(buf.getvalue()).decode()
-    return f'<img src="data:image/png;base64,{b64}" style="border-radius:8px; width:180px;">'
 
 
 # ── OTP por e-mail ────────────────────────────────────────────────────────────
@@ -1145,64 +1076,23 @@ def page_dashboard():
 
     st.divider()
 
-    # ── configuração de 2FA ───────────────────────────────────────
+    # ── status de 2FA por e-mail ──────────────────────────────────
     st.subheader("Autenticação em Dois Fatores (2FA)", anchor=False)
     st.markdown(
         f"<p style='font-size:0.85rem; color:{MUTED}; margin-bottom:1rem;'>"
-        "Gerencie os códigos de autenticação para cada usuário. "
-        "Após gerar, o usuário deve escanear o QR code no Google Authenticator.</p>",
+        "O 2FA é feito por código enviado ao e-mail de cada usuário. "
+        "Usuários sem e-mail cadastrado entram sem 2FA.</p>",
         unsafe_allow_html=True,
     )
-
-    users_2fa = load_users()
-    for uname, udata in sorted(users_2fa.items()):
-        secret = get_totp_secret(uname)
-        display = udata.get("display_name", uname)
-        status_html = (
-            "<span style='color:#4ADE80; font-size:0.8rem;'>● Ativo</span>"
-            if secret else
-            f"<span style='color:{MUTED}; font-size:0.8rem;'>○ Não configurado</span>"
-        )
-        c1, c2, c3 = st.columns([4, 1, 1])
-        with c1:
-            st.markdown(
-                f"<span style='font-weight:600;'>{display}</span> &nbsp; {status_html}",
-                unsafe_allow_html=True,
-            )
-        with c2:
-            showing = st.session_state.get(f"show_qr_{uname}", False)
-            if secret:
-                btn_label = "Esconder QR Code" if showing else "Ver QR Code"
-            else:
-                btn_label = "Ativar"
-            if st.button(btn_label, key=f"qr_{uname}", use_container_width=True):
-                if not secret:
-                    secret = pyotp.random_base32()
-                    set_totp_secret(uname, secret)
-                toggle = f"show_qr_{uname}"
-                st.session_state[toggle] = not st.session_state.get(toggle, False)
-                st.rerun()
-        with c3:
-            if secret and st.button("Revogar", key=f"rev_{uname}", use_container_width=True):
-                data = _load_json(DATA_DIR / "totp_secrets.json", {})
-                data.pop(uname, None)
-                _save_json(DATA_DIR / "totp_secrets.json", data)
-                st.session_state.pop(f"show_qr_{uname}", None)
-                st.rerun()
-
-        if st.session_state.get(f"show_qr_{uname}") and secret:
-            qc1, qc2 = st.columns([1, 3])
-            with qc1:
-                st.markdown(generate_qr_html(uname, secret), unsafe_allow_html=True)
-            with qc2:
-                st.markdown(
-                    f"<p style='font-size:0.82rem; color:{MUTED}; margin-bottom:0.4rem;'>"
-                    f"Escaneie com o Google Authenticator ou insira a chave manualmente:</p>",
-                    unsafe_allow_html=True,
-                )
-                st.code(secret, language=None)
-
-        st.markdown("<div style='margin-bottom:1rem;'></div>", unsafe_allow_html=True)
+    rows_2fa = []
+    for uname, udata in sorted(load_users().items()):
+        email = udata.get("email", "")
+        rows_2fa.append({
+            "Usuário": udata.get("display_name", uname),
+            "E-mail": email if email else "—",
+            "2FA": "✓ Ativo" if email else "✗ Sem e-mail",
+        })
+    st.dataframe(pd.DataFrame(rows_2fa), use_container_width=True, hide_index=True)
 
 
 # ── entry point ───────────────────────────────────────────────────────────────
