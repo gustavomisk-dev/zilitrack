@@ -37,7 +37,9 @@ footer {{ visibility: hidden; }}
 [data-testid="stToolbarActions"] {{ visibility: hidden; }}
 [data-testid="stBaseButton-header"] {{ visibility: hidden; }}
 
-/* ── sidebar largura fixa (só conteúdo interno) ──────────────── */
+/* ── sidebar largura fixa ────────────────────────────────────── */
+section[data-testid="stSidebar"],
+[data-testid="stSidebar"],
 [data-testid="stSidebar"] > div:first-child {{
     width: 260px !important;
     min-width: 260px !important;
