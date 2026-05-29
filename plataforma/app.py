@@ -37,10 +37,10 @@ footer {{ visibility: hidden; }}
 [data-testid="stToolbarActions"] {{ visibility: hidden; }}
 [data-testid="stBaseButton-header"] {{ visibility: hidden; }}
 
-/* ── sidebar largura fixa ────────────────────────────────────── */
-section[data-testid="stSidebar"],
-[data-testid="stSidebar"],
-[data-testid="stSidebar"] > div:first-child {{
+/* ── sidebar largura fixa (só quando aberta) ─────────────────── */
+section[data-testid="stSidebar"][aria-expanded="true"],
+[data-testid="stSidebar"][aria-expanded="true"],
+[data-testid="stSidebar"][aria-expanded="true"] > div:first-child {{
     width: 260px !important;
     min-width: 260px !important;
     max-width: 260px !important;
