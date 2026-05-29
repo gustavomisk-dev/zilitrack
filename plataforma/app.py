@@ -952,48 +952,59 @@ def page_como_usar():
     st.markdown(f"""
         <div style="max-width:680px; line-height:1.75; color:#E5E7EB;">
 
+        <h4 style="color:{GOLD}; margin-top:1.5rem;">Acesso à plataforma</h4>
+        <p>
+            O login é feito com o seu <b>e-mail</b> e <b>senha</b> fornecidos pela ZiliCred.
+            Após inserir as credenciais corretamente, um <b>código de verificação</b> será
+            enviado para o seu e-mail. Insira o código para concluir o acesso.
+            O código é válido por 10 minutos — caso não chegue, verifique a caixa de spam
+            ou clique em <b>Reenviar código</b>.
+        </p>
+
         <h4 style="color:{GOLD}; margin-top:1.5rem;">Clientes</h4>
         <p>
             Exibe a base de clientes enviada pela ZiliCred para a sua promotora.
             Use o seletor <b>Data de envio da base</b> para alternar entre lotes.
-            O resumo no topo mostra o total de clientes do lote selecionado.
+            O card no topo mostra o total de clientes e a data de envio do lote selecionado.
             A tabela traz a data e hora do processamento, o CPF e o nome de cada cliente.
-            Clique em <b>Baixar CSV</b> para exportar a lista.
+            Clique em <b>Baixar CSV</b> para exportar a lista completa.
         </p>
         <p>
             Quando houver um lote novo ainda não visualizado, o menu exibirá
-            um indicador ao lado de <b>Clientes</b>. Ele desaparece assim que
+            um indicador <b>●</b> ao lado de <b>Clientes</b>. Ele desaparece assim que
             a página for aberta.
         </p>
 
         <h4 style="color:{GOLD}; margin-top:1.5rem;">Conversão</h4>
         <p>
-            Exibe os clientes da sua base que efetivaram um contrato.
+            Exibe os clientes da sua base que efetivaram um contrato com a ZiliCred.
             Selecione o lote pela data de envio para visualizar CPF, nome,
             data de processamento e valor do contrato.
             Clique em <b>Baixar CSV</b> para exportar o relatório.
         </p>
         <p>
-            Abaixo da tabela, o gráfico de <b>Evolução por Lote</b> mostra a taxa de
+            Abaixo da tabela, o gráfico <b>Evolução por Lote</b> mostra a taxa de
             conversão de cada lote ao longo do tempo. Passe o cursor sobre os pontos
-            para ver os detalhes de enviados, convertidos e taxa.
+            para ver o detalhe de enviados, convertidos e taxa de cada lote.
         </p>
 
         <h4 style="color:{GOLD}; margin-top:1.5rem;">Ranking</h4>
         <p>
-            Mostra a sua posição no ranking de conversões entre todas as promotoras
-            participantes, sem revelar quem são as demais ou quantas estão no ranking.
-            Também exibe seus números de clientes enviados, convertidos e taxa de conversão.
+            Mostra a sua posição no ranking geral de conversões entre as promotoras
+            participantes. Os demais participantes não são identificados.
+            Também são exibidos os seus totais de clientes enviados, convertidos
+            e a taxa de conversão acumulada.
         </p>
 
         <h4 style="color:{GOLD}; margin-top:1.5rem;">Atualização dos dados</h4>
         <p>
-            Os dados são atualizados periodicamente pela equipe da ZiliCred.
-            Caso a aba de Clientes ou Conversão apareça sem informações,
-            aguarde a próxima atualização ou entre em contato com a equipe.
+            As bases de clientes e os relatórios de conversão são atualizados
+            periodicamente pela equipe da ZiliCred. Caso alguma aba apareça sem
+            informações, aguarde a próxima atualização. Você será notificado por
+            e-mail assim que uma nova base for disponibilizada.
         </p>
 
-        <h4 style="color:{GOLD}; margin-top:1.5rem;">Dúvidas</h4>
+        <h4 style="color:{GOLD}; margin-top:1.5rem;">Dúvidas ou problemas de acesso</h4>
         <p>
             Entre em contato com a ZiliCred pelo e-mail ou pelo seu gerente de relacionamento.
         </p>
