@@ -794,6 +794,21 @@ def files_controle_by_date() -> dict:
     return result
 
 
+def files_controle_convertidos_by_date() -> dict:
+    """Lista convertidos do controle: sem_envio_{DD-MM-YYYY}_{HH-MM}_convertidos.csv"""
+    result = {}
+    for f in _list_gh_folder("corban/convertidos"):
+        name = f.get("name", "")
+        if not (name.startswith("sem_envio_") and name.endswith("_convertidos.csv")):
+            continue
+        stem = name[len("sem_envio_"):-len("_convertidos.csv")]
+        parts = stem.split("_")
+        if len(parts) >= 2:
+            date_key = f"{parts[0]} {parts[1].replace('-', ':')}"
+            result[date_key] = f["path"]
+    return result
+
+
 def get_evolution_data(corban: str | None) -> pd.DataFrame:
     if not corban:
         return pd.DataFrame()
@@ -915,31 +930,54 @@ def page_clientes(corban: str | None):
 
 def page_controle():
     st.header("Grupo Controle", anchor=False)
-    available = files_controle_by_date()
-    if not available:
-        st.info("Nenhuma base de grupo controle disponível ainda.")
-        return
 
-    selected = st.selectbox("Data", _sort_dates(list(available.keys())))
-    df = (
-        read_csv(available[selected])[["CPF", "NomeCliente", "Último Processamento"]]
-        .rename(columns={"NomeCliente": "Nome do Cliente", "Último Processamento": "Data e Hora do Processamento"})
-        [["Data e Hora do Processamento", "CPF", "Nome do Cliente"]]
-    )
-    if df.empty:
-        st.info("Nenhum cliente nesta base.")
-        return
-    df = df.fillna("")
-    df["Nome do Cliente"] = df["Nome do Cliente"].apply(fmt_nome)
-    df.index = range(1, len(df) + 1)
-    st.markdown(f"<div style='font-size:0.85rem; color:{MUTED}; margin-bottom:0.75rem;'>{len(df)} clientes</div>", unsafe_allow_html=True)
-    st.dataframe(df, use_container_width=True, hide_index=False)
-    st.download_button(
-        "Baixar CSV",
-        df.to_csv(index=False, sep=";").encode("utf-8-sig"),
-        file_name=f"controle_{selected}.csv",
-        mime="text/csv",
-    )
+    tipo = st.radio("Visualizar", ["Clientes", "Convertidos"], horizontal=True, label_visibility="collapsed")
+
+    if tipo == "Convertidos":
+        available = files_controle_convertidos_by_date()
+        if not available:
+            st.info("Nenhuma conversão do grupo controle disponível ainda.")
+            return
+        selected = st.selectbox("Data", _sort_dates(list(available.keys())))
+        df = read_csv(available[selected])
+        if df.empty:
+            st.info("Nenhum convertido nesta base.")
+            return
+        df = df.fillna("")
+        df.index = range(1, len(df) + 1)
+        st.markdown(f"<div style='font-size:0.85rem; color:{MUTED}; margin-bottom:0.75rem;'>{len(df)} convertido(s)</div>", unsafe_allow_html=True)
+        st.dataframe(df, use_container_width=True, hide_index=False)
+        st.download_button(
+            "Baixar CSV",
+            df.to_csv(index=False, sep=";").encode("utf-8-sig"),
+            file_name=f"controle_convertidos_{selected}.csv",
+            mime="text/csv",
+        )
+    else:
+        available = files_controle_by_date()
+        if not available:
+            st.info("Nenhuma base de grupo controle disponível ainda.")
+            return
+        selected = st.selectbox("Data", _sort_dates(list(available.keys())))
+        df = (
+            read_csv(available[selected])[["CPF", "NomeCliente", "Último Processamento"]]
+            .rename(columns={"NomeCliente": "Nome do Cliente", "Último Processamento": "Data e Hora do Processamento"})
+            [["Data e Hora do Processamento", "CPF", "Nome do Cliente"]]
+        )
+        if df.empty:
+            st.info("Nenhum cliente nesta base.")
+            return
+        df = df.fillna("")
+        df["Nome do Cliente"] = df["Nome do Cliente"].apply(fmt_nome)
+        df.index = range(1, len(df) + 1)
+        st.markdown(f"<div style='font-size:0.85rem; color:{MUTED}; margin-bottom:0.75rem;'>{len(df)} clientes</div>", unsafe_allow_html=True)
+        st.dataframe(df, use_container_width=True, hide_index=False)
+        st.download_button(
+            "Baixar CSV",
+            df.to_csv(index=False, sep=";").encode("utf-8-sig"),
+            file_name=f"controle_{selected}.csv",
+            mime="text/csv",
+        )
 
 
 def page_conversao(corban: str | None):
