@@ -1155,7 +1155,7 @@ def page_upload():
         unsafe_allow_html=True,
     )
 
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
     with c1:
         st.caption("Enviados")
         arqs_env = sorted(f["name"] for f in _list_gh_folder(PASTA_ENVIADOS) if f.get("name", "").endswith(".csv"))
@@ -1169,6 +1169,13 @@ def page_upload():
         for name in arqs_conv:
             st.markdown(f"<span style='font-size:0.82rem;'>{name}</span>", unsafe_allow_html=True)
         if not arqs_conv:
+            st.markdown(f"<span style='font-size:0.82rem; color:{MUTED};'>Nenhum arquivo</span>", unsafe_allow_html=True)
+    with c3:
+        st.caption("Grupo Controle")
+        arqs_ctrl = sorted(f["name"] for f in _list_gh_folder("corban/controle") if f.get("name", "").endswith(".csv"))
+        for name in arqs_ctrl:
+            st.markdown(f"<span style='font-size:0.82rem;'>{name}</span>", unsafe_allow_html=True)
+        if not arqs_ctrl:
             st.markdown(f"<span style='font-size:0.82rem; color:{MUTED};'>Nenhum arquivo</span>", unsafe_allow_html=True)
 
 
