@@ -526,58 +526,6 @@ def send_upload_notification(corbans_notificados: list[str]):
 
 # ── download seguro ───────────────────────────────────────────────────────────
 
-def generate_download_otp(username: str) -> bool:
-    import secrets as _secrets
-    users = load_users()
-    email = users.get(username, {}).get("email")
-    if not email:
-        return False
-    try:
-        smtp_cfg = st.secrets.get("smtp", {})
-        if not smtp_cfg or not smtp_cfg.get("user"):
-            return False
-        code    = f"{_secrets.randbelow(1000000):06d}"
-        expires = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=10)).isoformat(timespec="seconds")
-        path    = DATA_DIR / "download_otp.json"
-        data    = _load_json(path, {})
-        data[username] = {"code": code, "expires": expires}
-        _save_json(path, data)
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"Código para download · {APP_NAME}"
-        msg["From"]    = f"{APP_NAME} <{smtp_cfg['user']}>"
-        msg["To"]      = email
-        corpo = (
-            f"Seu código para autorizar o download é:\n\n"
-            f"    {code}\n\n"
-            f"Válido por 10 minutos.\n\n— ZiliCred"
-        )
-        msg.attach(MIMEText(corpo, "plain", "utf-8"))
-        with smtplib.SMTP(smtp_cfg.get("host", "smtp.gmail.com"), int(smtp_cfg.get("port", 587))) as srv:
-            srv.starttls()
-            srv.login(smtp_cfg["user"], smtp_cfg["password"])
-            srv.sendmail(smtp_cfg["user"], email, msg.as_string())
-        return True
-    except Exception:
-        return False
-
-
-def verify_download_otp(username: str, code: str) -> bool:
-    path  = DATA_DIR / "download_otp.json"
-    data  = _load_json(path, {})
-    entry = data.get(username)
-    if not entry:
-        return False
-    try:
-        if datetime.now(timezone.utc).replace(tzinfo=None) > datetime.fromisoformat(entry["expires"]):
-            return False
-        if entry["code"] == code.strip():
-            data.pop(username)
-            _save_json(path, data)
-            return True
-    except Exception:
-        pass
-    return False
-
 
 def generate_file_password() -> str:
     import secrets as _secrets
@@ -627,12 +575,11 @@ def create_encrypted_excel(df: pd.DataFrame, password: str) -> bytes:
 
 def _render_download_seguro(username: str, page: str, selected: str,
                              df: pd.DataFrame, base_filename: str):
-    """Renderiza o fluxo de download com OTP + Excel criptografado."""
-    key      = f"{page}_{selected}"
-    dl       = st.session_state.get("dl_state", {})
-    xl_name  = base_filename.replace(".csv", ".xlsx")
+    key     = f"{page}_{selected}"
+    dl      = st.session_state.get("dl_state", {})
+    xl_name = base_filename.replace(".csv", ".xlsx")
 
-    if dl.get("key") == key and dl.get("step") == "ready":
+    if dl.get("key") == key:
         st.success("Senha enviada por e-mail. Use-a para abrir o arquivo Excel.")
         clicked = st.download_button(
             "Baixar arquivo",
@@ -643,37 +590,13 @@ def _render_download_seguro(username: str, page: str, selected: str,
         if clicked:
             st.session_state.pop("dl_state", None)
             st.rerun()
-
-    elif dl.get("key") == key and dl.get("step") == "otp":
-        users        = load_users()
-        email_masked = _mask_email(users.get(username, {}).get("email", ""))
-        st.info(f"Código enviado para **{email_masked}**. Válido por 10 minutos.")
-        with st.form(f"dl_otp_{key}"):
-            code      = st.text_input("Código de verificação", max_chars=6, placeholder="000000")
-            submitted = st.form_submit_button("Confirmar download", width="stretch")
-        if submitted:
-            if verify_download_otp(username, code):
-                pwd     = generate_file_password()
-                xl_data = create_encrypted_excel(df, pwd)
-                send_file_password_email(username, pwd, xl_name)
-                st.session_state["dl_state"] = {
-                    "key": key, "step": "ready",
-                    "xl_bytes": xl_data, "filename": xl_name,
-                }
-                st.rerun()
-            else:
-                st.error("Código inválido ou expirado.")
-        if st.button("Cancelar", key=f"dl_cancel_otp_{key}"):
-            st.session_state.pop("dl_state", None)
-            st.rerun()
-
     else:
-        if st.button("Solicitar download", key=f"dl_btn_{key}"):
-            if generate_download_otp(username):
-                st.session_state["dl_state"] = {"key": key, "step": "otp"}
-                st.rerun()
-            else:
-                st.error("Erro ao enviar código. Verifique a configuração de e-mail.")
+        if st.button("Baixar arquivo", key=f"dl_btn_{key}"):
+            pwd     = generate_file_password()
+            xl_data = create_encrypted_excel(df, pwd)
+            send_file_password_email(username, pwd, xl_name)
+            st.session_state["dl_state"] = {"key": key, "xl_bytes": xl_data, "filename": xl_name}
+            st.rerun()
 
 
 _DUMMY_CLIENTES = pd.DataFrame([
