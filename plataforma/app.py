@@ -825,20 +825,11 @@ def page_clientes(corban: str | None):
     st.header("Clientes", anchor=False)
     is_admin = st.session_state.get("is_admin")
 
-    # Admin vê seletor de tipo de base
-    if is_admin:
-        tipo = st.radio("Tipo", ["Enviados", "Grupo Controle"], horizontal=True, label_visibility="collapsed")
-    else:
-        tipo = "Enviados"
-
-    if tipo == "Grupo Controle":
-        available = files_controle_by_date()
-    else:
-        available = files_by_date(PASTA_ENVIADOS, corban, "enviados")
+    available = files_by_date(PASTA_ENVIADOS, corban, "enviados")
 
     if not available:
         if is_admin:
-            st.info(f"Nenhuma base de {'grupo controle' if tipo == 'Grupo Controle' else 'enviados'} disponível ainda.")
+            st.info("Nenhuma base enviada disponível ainda.")
         else:
             st.info(
                 "Nenhuma base de clientes disponível no momento. "
@@ -853,7 +844,7 @@ def page_clientes(corban: str | None):
     )
 
     # Marca base como vista (apenas para corbans, não para admin)
-    if tipo == "Enviados" and corban and not is_admin:
+    if corban and not is_admin:
         latest = _sort_dates(list(available.keys()))[0]
         update_last_seen(corban, latest)
 
@@ -916,6 +907,35 @@ def page_clientes(corban: str | None):
         st.dataframe(preview, use_container_width=True, hide_index=False)
         username = st.session_state.get("username", "")
         _render_download_seguro(username, "clientes", selected, df, f"clientes_{selected}.csv")
+
+
+def page_controle():
+    st.header("Grupo Controle", anchor=False)
+    available = files_controle_by_date()
+    if not available:
+        st.info("Nenhuma base de grupo controle disponível ainda.")
+        return
+
+    selected = st.selectbox("Data", _sort_dates(list(available.keys())))
+    df = (
+        read_csv(available[selected])[["CPF", "NomeCliente", "Último Processamento"]]
+        .rename(columns={"NomeCliente": "Nome do Cliente", "Último Processamento": "Data e Hora do Processamento"})
+        [["Data e Hora do Processamento", "CPF", "Nome do Cliente"]]
+    )
+    if df.empty:
+        st.info("Nenhum cliente nesta base.")
+        return
+    df = df.fillna("")
+    df["Nome do Cliente"] = df["Nome do Cliente"].apply(fmt_nome)
+    df.index = range(1, len(df) + 1)
+    st.markdown(f"<div style='font-size:0.85rem; color:{MUTED}; margin-bottom:0.75rem;'>{len(df)} clientes</div>", unsafe_allow_html=True)
+    st.dataframe(df, use_container_width=True, hide_index=False)
+    st.download_button(
+        "Baixar CSV",
+        df.to_csv(index=False, sep=";").encode("utf-8-sig"),
+        file_name=f"controle_{selected}.csv",
+        mime="text/csv",
+    )
 
 
 def page_conversao(corban: str | None):
@@ -1383,7 +1403,7 @@ def main():
             if not corbans:
                 corban = None
             st.divider()
-            menu = ["Dashboard", "Clientes", "Conversão", "Arquivos"]
+            menu = ["Dashboard", "Clientes", "Conversão", "Controle", "Arquivos"]
         else:
             corban = st.session_state["corban"]
             clientes_label = "Clientes ●" if has_new_base(corban) else "Clientes"
@@ -1434,6 +1454,8 @@ def main():
         page_clientes(corban)
     elif page == "Conversão":
         page_conversao(corban)
+    elif page == "Controle":
+        page_controle()
     elif page == "Arquivos":
         page_upload()
     elif page == "Ranking":
