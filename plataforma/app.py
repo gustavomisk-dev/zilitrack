@@ -924,7 +924,7 @@ def page_conversao(corban: str | None):
     available_conv = files_by_date(PASTA_CONVERTIDOS, corban, "convertidos")
     if not available_conv:
         if st.session_state.get("is_admin"):
-            st.info("Nenhuma conversão disponível ainda. Acesse a página Upload para adicionar os arquivos.")
+            st.info("Nenhuma conversão disponível ainda.")
         else:
             st.info(
                 "Nenhum relatório de conversão disponível no momento. "
@@ -1383,7 +1383,7 @@ def main():
             if not corbans:
                 corban = None
             st.divider()
-            menu = ["Dashboard", "Clientes", "Conversão", "Upload"]
+            menu = ["Dashboard", "Clientes", "Conversão", "Arquivos"]
         else:
             corban = st.session_state["corban"]
             clientes_label = "Clientes ●" if has_new_base(corban) else "Clientes"
@@ -1434,7 +1434,7 @@ def main():
         page_clientes(corban)
     elif page == "Conversão":
         page_conversao(corban)
-    elif page == "Upload":
+    elif page == "Arquivos":
         page_upload()
     elif page == "Ranking":
         page_ranking(corban)
