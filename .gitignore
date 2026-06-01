@@ -18,6 +18,8 @@ corban/
 corban-legado/
 esteira/
 plataforma/users.json
+plataforma/secrets.toml.example
+plataforma/.streamlit/
 scripts/
 convertidos_*.csv
 docs/

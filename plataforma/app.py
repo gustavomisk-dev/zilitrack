@@ -1,6 +1,10 @@
 import altair as alt
+import base64
+import io
 import json
 import smtplib
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -12,10 +16,9 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 HERE = Path(__file__).parent
-ROOT = HERE.parent
-PASTA_ENVIADOS    = ROOT / "corban" / "enviados"
-PASTA_CONVERTIDOS = ROOT / "corban" / "convertidos"
 DATA_DIR          = HERE / "data"
+PASTA_ENVIADOS    = "corban/enviados"
+PASTA_CONVERTIDOS = "corban/convertidos"
 
 APP_NAME  = "ZiliTrack"
 GOLD      = "#F0B429"
@@ -25,7 +28,6 @@ MUTED     = "#6B7280"
 
 CORBAN_NAMES = {
     "assuncao":      "Assunção",
-    "suapromotora":  "Sua Promotora",
 }
 
 CSS = f"""
@@ -168,6 +170,92 @@ hr {{ border-color: {BORDER} !important; }}
 </style>
 """
 
+
+# ── GitHub storage ────────────────────────────────────────────────────────────
+
+def _gh_token() -> str:
+    try:
+        return st.secrets["github"]["token"]
+    except Exception:
+        return ""
+
+def _gh_repo() -> str:
+    try:
+        return st.secrets["github"]["repo"]
+    except Exception:
+        return "gustavomisk-dev/zilitrack-dados"
+
+def _gh_api_get(path: str):
+    url = f"https://api.github.com/repos/{_gh_repo()}/contents/{path}"
+    req = urllib.request.Request(
+        url,
+        headers={"Authorization": f"token {_gh_token()}", "Accept": "application/vnd.github.v3+json"},
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+
+def _gh_push(gh_path: str, content_bytes: bytes, commit_msg: str) -> None:
+    existing = _gh_api_get(gh_path)
+    sha = existing.get("sha") if isinstance(existing, dict) else None
+    body: dict = {"message": commit_msg, "content": base64.b64encode(content_bytes).decode()}
+    if sha:
+        body["sha"] = sha
+    url = f"https://api.github.com/repos/{_gh_repo()}/contents/{gh_path}"
+    req = urllib.request.Request(
+        url, data=json.dumps(body).encode(),
+        headers={"Authorization": f"token {_gh_token()}", "Accept": "application/vnd.github.v3+json", "Content-Type": "application/json"},
+        method="PUT",
+    )
+    urllib.request.urlopen(req).close()
+
+def _gh_delete(gh_path: str, commit_msg: str) -> None:
+    existing = _gh_api_get(gh_path)
+    if not isinstance(existing, dict) or "sha" not in existing:
+        return
+    body = {"message": commit_msg, "sha": existing["sha"]}
+    url = f"https://api.github.com/repos/{_gh_repo()}/contents/{gh_path}"
+    req = urllib.request.Request(
+        url, data=json.dumps(body).encode(),
+        headers={"Authorization": f"token {_gh_token()}", "Accept": "application/vnd.github.v3+json", "Content-Type": "application/json"},
+        method="DELETE",
+    )
+    urllib.request.urlopen(req).close()
+
+@st.cache_data(ttl=120)
+def _list_gh_folder(folder: str) -> list:
+    result = _gh_api_get(folder)
+    return result if isinstance(result, list) else []
+
+@st.cache_data(ttl=120)
+def _read_gh_csv(gh_path: str) -> pd.DataFrame:
+    data = _gh_api_get(gh_path)
+    if not data or "content" not in data:
+        return pd.DataFrame()
+    raw = base64.b64decode(data["content"])
+    return pd.read_csv(io.StringIO(raw.decode("utf-8-sig")), sep=";", dtype=str, keep_default_na=False)
+
+@st.cache_data(ttl=120)
+def get_upload_time(filename: str, file_path=None) -> str | None:
+    gh_path = str(file_path) if file_path and not isinstance(file_path, Path) else f"{PASTA_ENVIADOS}/{filename}"
+    try:
+        url = f"https://api.github.com/repos/{_gh_repo()}/commits?path={gh_path}&per_page=1"
+        req = urllib.request.Request(
+            url, headers={"Authorization": f"token {_gh_token()}", "Accept": "application/vnd.github.v3+json"},
+        )
+        with urllib.request.urlopen(req) as resp:
+            commits = json.loads(resp.read())
+        if commits:
+            ts = commits[0]["commit"]["committer"]["date"]
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00")).replace(tzinfo=None) - timedelta(hours=3)
+            return dt.strftime("%d/%m/%Y às %H:%M")
+    except Exception:
+        pass
+    return None
 
 # {username: {"count": int, "blocked_until": datetime | None}}
 _login_attempts: dict = {}
@@ -507,7 +595,6 @@ def send_file_password_email(username: str, password: str, filename: str):
 
 
 def create_encrypted_excel(df: pd.DataFrame, password: str) -> bytes:
-    import io
     import msoffcrypto
     excel_buf = io.BytesIO()
     df.to_excel(excel_buf, index=False)
@@ -593,11 +680,8 @@ def log_access(username: str, display_name: str):
     _save_json(path, log)
 
 
-def log_upload(filename: str):
-    path = DATA_DIR / "upload_log.json"
-    data = _load_json(path, {})
-    data[filename] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
-    _save_json(path, data)
+def log_upload(_filename: str = ""):
+    pass  # timestamp derivado do commit do GitHub
 
 
 def get_latest_processamento(df: pd.DataFrame) -> str | None:
@@ -613,22 +697,6 @@ def get_latest_processamento(df: pd.DataFrame) -> str | None:
         return None
 
 
-def get_upload_time(filename: str, file_path: Path | None = None) -> str | None:
-    data = _load_json(DATA_DIR / "upload_log.json", {})
-    ts = data.get(filename)
-    if ts:
-        try:
-            dt = datetime.fromisoformat(ts) - timedelta(hours=3)
-            return dt.strftime("%d/%m/%Y às %H:%M")
-        except Exception:
-            pass
-    if file_path and file_path.exists():
-        try:
-            dt = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc).replace(tzinfo=None) - timedelta(hours=3)
-            return dt.strftime("%d/%m/%Y às %H:%M")
-        except Exception:
-            pass
-    return None
 
 
 def update_last_seen(corban: str, date_str: str):
@@ -647,19 +715,19 @@ def has_new_base(corban: str) -> bool:
     if not available:
         return False
     try:
-        latest_date = max(datetime.strptime(d, "%d-%m-%Y") for d in available)
+        latest_date = max(datetime.strptime(d, "%d-%m-%Y %H:%M") for d in available)
         last_seen_str = get_last_seen(corban)
         if not last_seen_str:
             return True
-        return latest_date > datetime.strptime(last_seen_str, "%d-%m-%Y")
+        return latest_date > datetime.strptime(last_seen_str, "%d-%m-%Y %H:%M")
     except ValueError:
         return False
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-def read_csv(path):
-    return pd.read_csv(path, sep=";", encoding="utf-8-sig", dtype=str, keep_default_na=False)
+def read_csv(path) -> pd.DataFrame:
+    return _read_gh_csv(str(path))
 
 
 _CONECTIVOS = {"de", "da", "do", "das", "dos", "e", "a", "o", "em", "na", "no", "nas", "nos", "por", "para", "com"}
@@ -688,25 +756,30 @@ def fmt_brl(val) -> str:
         return ""
 
 
-def files_by_date(pasta: Path, corban: str | None, suffix: str) -> dict:
-    if not pasta.exists() or not corban:
+def files_by_date(pasta, corban: str | None, suffix: str) -> dict:
+    if not corban:
         return {}
     result = {}
-    for f in sorted(pasta.glob(f"*_{corban}_*_{suffix}.csv")):
-        parts = f.stem.split("_")
+    for f in _list_gh_folder(str(pasta)):
+        name = f.get("name", "")
+        if not (name.startswith(f"{corban}_") and name.endswith(f"_{suffix}.csv")):
+            continue
+        stem = name[: -len(f"_{suffix}.csv")]
+        parts = stem.split("_")
         if len(parts) >= 3:
-            result[parts[2]] = f
+            date_key = f"{parts[1]} {parts[2].replace('-', ':')}"
+            result[date_key] = f["path"]
     return result
 
 
 def get_all_corbans() -> list:
-    if not PASTA_ENVIADOS.exists():
-        return []
     corbans = set()
-    for f in PASTA_ENVIADOS.glob("*_enviados.csv"):
-        parts = f.stem.split("_")
-        if len(parts) >= 4:
-            corbans.add(parts[1])
+    for f in _list_gh_folder(PASTA_ENVIADOS):
+        name = f.get("name", "")
+        if name.endswith("_enviados.csv"):
+            parts = name[: -len("_enviados.csv")].split("_")
+            if len(parts) >= 3:
+                corbans.add(parts[0])
     return sorted(corbans)
 
 
@@ -725,25 +798,22 @@ def _parse_valor(val) -> float:
 
 
 def calcular_ranking() -> list[dict]:
-    """Retorna lista ordenada por taxa de conversão desc: [{corban, enviados, convertidos, taxa, valor_total}]"""
     corbans = get_all_corbans()
     resultado = []
     for corban in corbans:
-        enviados = sum(
-            len(read_csv(f)) for f in PASTA_ENVIADOS.glob(f"*_{corban}_*_enviados.csv")
-        )
+        env_files = files_by_date(PASTA_ENVIADOS, corban, "enviados")
+        enviados = sum(len(_read_gh_csv(p)) for p in env_files.values())
         convertidos = 0
         valor_total = 0.0
-        if PASTA_CONVERTIDOS.exists():
-            for f in PASTA_CONVERTIDOS.glob(f"*_{corban}_*_convertidos.csv"):
-                df = read_csv(f)
-                convertidos += len(df)
-                col_valor = next((c for c in df.columns if "Valor" in c and "ontrat" in c), None)
-                if col_valor:
-                    try:
-                        valor_total += float(df[col_valor].apply(_parse_valor).sum())
-                    except Exception:
-                        pass
+        for p in files_by_date(PASTA_CONVERTIDOS, corban, "convertidos").values():
+            df = _read_gh_csv(p)
+            convertidos += len(df)
+            col_valor = next((c for c in df.columns if "Valor" in c and "ontrat" in c), None)
+            if col_valor:
+                try:
+                    valor_total += float(df[col_valor].apply(_parse_valor).sum())
+                except Exception:
+                    pass
         taxa = convertidos / enviados if enviados else 0.0
         resultado.append({
             "corban": corban,
@@ -757,34 +827,28 @@ def calcular_ranking() -> list[dict]:
 
 
 def _sort_dates(dates: list[str]) -> list[str]:
-    """Ordena datas no formato DD-MM-YYYY cronologicamente (mais recente primeiro)."""
+    """Ordena datas no formato 'DD-MM-YYYY HH:MM' cronologicamente (mais recente primeiro)."""
     try:
-        return sorted(dates, key=lambda d: datetime.strptime(d, "%d-%m-%Y"), reverse=True)
+        return sorted(dates, key=lambda d: datetime.strptime(d, "%d-%m-%Y %H:%M"), reverse=True)
     except ValueError:
         return sorted(dates, reverse=True)
 
 
 def get_evolution_data(corban: str | None) -> pd.DataFrame:
-    if not corban or not PASTA_ENVIADOS.exists():
+    if not corban:
         return pd.DataFrame()
     rows = []
-    for f_env in PASTA_ENVIADOS.glob(f"*_{corban}_*_enviados.csv"):
-        parts = f_env.stem.split("_")
-        if len(parts) < 3:
-            continue
-        date_str = parts[2]
+    conv_files = files_by_date(PASTA_CONVERTIDOS, corban, "convertidos")
+    for date_key, env_path in files_by_date(PASTA_ENVIADOS, corban, "enviados").items():
         try:
-            dt = datetime.strptime(date_str, "%d-%m-%Y")
+            dt = datetime.strptime(date_key, "%d-%m-%Y %H:%M")
         except ValueError:
             continue
-        n_env = len(read_csv(f_env))
-        n_conv = 0
-        if PASTA_CONVERTIDOS.exists():
-            for f_conv in PASTA_CONVERTIDOS.glob(f"*_{corban}_{date_str}_convertidos.csv"):
-                n_conv += len(read_csv(f_conv))
+        n_env = len(_read_gh_csv(env_path))
+        n_conv = sum(len(_read_gh_csv(p)) for dk, p in conv_files.items() if dk == date_key)
         rows.append({
             "_date": dt,
-            "Data": date_str,
+            "Data": date_key,
             "Enviados": n_env,
             "Convertidos": n_conv,
             "Taxa (%)": round(n_conv / n_env * 100, 1) if n_env else 0.0,
@@ -937,7 +1001,8 @@ def page_conversao(corban: str | None):
         df_conv["Valor do Contrato"] = df_conv["Valor do Contrato"].apply(fmt_brl)
 
     total_conv = len(df_conv)
-    upload_time = get_upload_time(available_conv[selected].name, available_conv[selected])
+    conv_path = available_conv[selected]
+    upload_time = get_upload_time(conv_path.split("/")[-1], conv_path)
     sep = f"<div style='width:1px; height:2.5rem; background:{BORDER};'></div>" if upload_time else ""
     atualizado_html = f"""
         {sep}
@@ -1012,54 +1077,76 @@ def page_upload():
     st.session_state.setdefault("up_env_n", 0)
     st.session_state.setdefault("up_conv_n", 0)
 
-    c1, c2 = st.columns(2)
+    corban_options = sorted(CORBAN_NAMES.keys())
 
+    # ── bases enviadas ────────────────────────────────────────────
+    st.subheader("Base Enviada", anchor=False)
+    c1, c2 = st.columns([1, 2])
     with c1:
-        st.markdown(
-            "<p style='font-weight:600; margin-bottom:0.5rem;'>Bases Enviadas</p>",
-            unsafe_allow_html=True,
+        corban_env = st.selectbox(
+            "Promotora", corban_options,
+            format_func=lambda c: CORBAN_NAMES.get(c, c),
+            key="up_corban_env",
         )
+    with c2:
         uploaded_env = st.file_uploader(
-            "enviados", type="csv", accept_multiple_files=True,
+            "Arquivo CSV", type="csv",
             label_visibility="collapsed", key=f"up_env_{st.session_state.up_env_n}",
         )
-        if uploaded_env and st.button("Salvar", key="btn_env"):
-            PASTA_ENVIADOS.mkdir(parents=True, exist_ok=True)
-            corbans_salvos = set()
-            for f in uploaded_env:
-                (PASTA_ENVIADOS / f.name).write_bytes(f.read())
-                log_upload(f.name)
-                parts = Path(f.name).stem.split("_")
-                if len(parts) >= 2:
-                    corbans_salvos.add(parts[1])
-            send_upload_notification(list(corbans_salvos))
-            st.session_state.up_env_n += 1
-            st.rerun()
+    if uploaded_env and st.button("Salvar base", key="btn_env"):
+        agora = datetime.now()
+        nome  = f"{corban_env}_{agora.strftime('%d-%m-%Y')}_{agora.strftime('%H-%M')}_enviados.csv"
+        _gh_push(f"{PASTA_ENVIADOS}/{nome}", uploaded_env.read(), f"upload enviados: {nome}")
+        _list_gh_folder.clear()
+        _read_gh_csv.clear()
+        send_upload_notification([corban_env])
+        st.session_state.up_env_n += 1
+        st.rerun()
 
-    with c2:
-        st.markdown(
-            "<p style='font-weight:600; margin-bottom:0.5rem;'>Conversões</p>",
-            unsafe_allow_html=True,
+    st.divider()
+
+    # ── conversões ────────────────────────────────────────────────
+    st.subheader("Conversão", anchor=False)
+    c1, c2, c3 = st.columns([1, 1, 2])
+    with c1:
+        corban_conv = st.selectbox(
+            "Promotora", corban_options,
+            format_func=lambda c: CORBAN_NAMES.get(c, c),
+            key="up_corban_conv",
         )
+    with c2:
+        bases_env = files_by_date(PASTA_ENVIADOS, corban_conv, "enviados")
+        bases_opts = _sort_dates(list(bases_env.keys())) if bases_env else []
+        base_sel = st.selectbox(
+            "Base correspondente",
+            bases_opts if bases_opts else ["—"],
+            disabled=not bases_opts,
+            key="up_base_conv",
+        )
+    with c3:
         uploaded_conv = st.file_uploader(
-            "convertidos", type="csv", accept_multiple_files=True,
+            "Arquivo CSV", type="csv",
             label_visibility="collapsed", key=f"up_conv_{st.session_state.up_conv_n}",
         )
-        bc1, bc2 = st.columns([1, 1])
-        with bc1:
-            if uploaded_conv and st.button("Salvar", key="btn_conv"):
-                PASTA_CONVERTIDOS.mkdir(parents=True, exist_ok=True)
-                for f in uploaded_conv:
-                    (PASTA_CONVERTIDOS / f.name).write_bytes(f.read())
-                    log_upload(f.name)
-                st.session_state.up_conv_n += 1
-                st.rerun()
-        with bc2:
-            if st.button("Limpar convertidos", key="btn_limpar"):
-                if PASTA_CONVERTIDOS.exists():
-                    for f in PASTA_CONVERTIDOS.glob("*.csv"):
-                        f.unlink()
-                st.rerun()
+
+    bc1, bc2 = st.columns([1, 1])
+    with bc1:
+        if uploaded_conv and bases_opts and st.button("Salvar conversão", key="btn_conv"):
+            date_str, time_str = base_sel.split(" ")
+            nome = f"{corban_conv}_{date_str}_{time_str.replace(':', '-')}_convertidos.csv"
+            _gh_push(f"{PASTA_CONVERTIDOS}/{nome}", uploaded_conv.read(), f"upload convertidos: {nome}")
+            _list_gh_folder.clear()
+            _read_gh_csv.clear()
+            st.session_state.up_conv_n += 1
+            st.rerun()
+    with bc2:
+        if st.button("Limpar convertidos", key="btn_limpar"):
+            for f in _list_gh_folder(PASTA_CONVERTIDOS):
+                if f.get("name", "").endswith(".csv"):
+                    _gh_delete(f["path"], f"limpar: {f['name']}")
+            _list_gh_folder.clear()
+            _read_gh_csv.clear()
+            st.rerun()
 
     st.divider()
     st.markdown(
@@ -1071,16 +1158,16 @@ def page_upload():
     c1, c2 = st.columns(2)
     with c1:
         st.caption("Enviados")
-        arqs_env = sorted(PASTA_ENVIADOS.glob("*.csv")) if PASTA_ENVIADOS.exists() else []
-        for f in arqs_env:
-            st.markdown(f"<span style='font-size:0.82rem;'>{f.name}</span>", unsafe_allow_html=True)
+        arqs_env = sorted(f["name"] for f in _list_gh_folder(PASTA_ENVIADOS) if f.get("name", "").endswith(".csv"))
+        for name in arqs_env:
+            st.markdown(f"<span style='font-size:0.82rem;'>{name}</span>", unsafe_allow_html=True)
         if not arqs_env:
             st.markdown(f"<span style='font-size:0.82rem; color:{MUTED};'>Nenhum arquivo</span>", unsafe_allow_html=True)
     with c2:
         st.caption("Convertidos")
-        arqs_conv = sorted(PASTA_CONVERTIDOS.glob("*.csv")) if PASTA_CONVERTIDOS.exists() else []
-        for f in arqs_conv:
-            st.markdown(f"<span style='font-size:0.82rem;'>{f.name}</span>", unsafe_allow_html=True)
+        arqs_conv = sorted(f["name"] for f in _list_gh_folder(PASTA_CONVERTIDOS) if f.get("name", "").endswith(".csv"))
+        for name in arqs_conv:
+            st.markdown(f"<span style='font-size:0.82rem;'>{name}</span>", unsafe_allow_html=True)
         if not arqs_conv:
             st.markdown(f"<span style='font-size:0.82rem; color:{MUTED};'>Nenhum arquivo</span>", unsafe_allow_html=True)
 
