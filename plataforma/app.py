@@ -575,28 +575,26 @@ def create_encrypted_excel(df: pd.DataFrame, password: str) -> bytes:
 
 def _render_download_seguro(username: str, page: str, selected: str,
                              df: pd.DataFrame, base_filename: str):
-    key     = f"{page}_{selected}"
-    dl      = st.session_state.get("dl_state", {})
-    xl_name = base_filename.replace(".csv", ".xlsx")
+    xl_name   = base_filename.replace(".csv", ".xlsx")
+    cache_key = f"_dl_{page}_{selected}"
 
-    if dl.get("key") == key:
-        st.success("Senha enviada por e-mail. Use-a para abrir o arquivo Excel.")
-        clicked = st.download_button(
-            "Baixar arquivo",
-            data=dl["xl_bytes"],
-            file_name=dl["filename"],
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-        if clicked:
-            st.session_state.pop("dl_state", None)
-            st.rerun()
-    else:
-        if st.button("Baixar arquivo", key=f"dl_btn_{key}"):
-            pwd     = generate_file_password()
-            xl_data = create_encrypted_excel(df, pwd)
-            send_file_password_email(username, pwd, xl_name)
-            st.session_state["dl_state"] = {"key": key, "xl_bytes": xl_data, "filename": xl_name}
-            st.rerun()
+    # Pré-gera o Excel uma vez por seleção (cacheado em session_state)
+    if cache_key not in st.session_state:
+        pwd     = generate_file_password()
+        xl_data = create_encrypted_excel(df, pwd)
+        st.session_state[cache_key] = (xl_data, pwd)
+
+    xl_data, pwd = st.session_state[cache_key]
+
+    # on_click envia o e-mail com a senha no mesmo momento do clique
+    st.download_button(
+        "Baixar arquivo",
+        data=xl_data,
+        file_name=xl_name,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        on_click=send_file_password_email,
+        args=(username, pwd, xl_name),
+    )
 
 
 _DUMMY_CLIENTES = pd.DataFrame([
