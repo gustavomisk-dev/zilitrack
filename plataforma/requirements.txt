@@ -3,3 +3,4 @@ pandas
 bcrypt
 openpyxl
 msoffcrypto-tool
+streamlit-cookies-controller

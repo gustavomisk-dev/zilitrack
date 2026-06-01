@@ -1,8 +1,11 @@
 import altair as alt
 import base64
+import hashlib
+import hmac
 import io
 import json
 import smtplib
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -13,6 +16,7 @@ from pathlib import Path
 import bcrypt
 import pandas as pd
 import streamlit as st
+from streamlit_cookies_controller import CookieController
 import streamlit.components.v1 as components
 
 HERE = Path(__file__).parent
@@ -170,6 +174,34 @@ hr {{ border-color: {BORDER} !important; }}
 </style>
 """
 
+
+# ── sessão persistente (cookie) ───────────────────────────────────────────────
+
+_COOKIE_NAME    = "zilitrack_session"
+_COOKIE_MAX_AGE = 60 * 60 * 24 * 7   # 7 dias em segundos
+
+def _session_secret() -> str:
+    try:
+        return st.secrets["session"]["secret"]
+    except Exception:
+        return "zilitrack-secret-fallback"
+
+def _make_token(username: str) -> str:
+    expires = int(time.time()) + _COOKIE_MAX_AGE
+    msg = f"{username}:{expires}"
+    sig = hmac.new(_session_secret().encode(), msg.encode(), hashlib.sha256).hexdigest()
+    return f"{msg}:{sig}"
+
+def _verify_token(token: str) -> str | None:
+    """Retorna username se o token for válido e não expirado, senão None."""
+    try:
+        username, expires_str, sig = token.rsplit(":", 2)
+        if time.time() > int(expires_str):
+            return None
+        expected = hmac.new(_session_secret().encode(), f"{username}:{expires_str}".encode(), hashlib.sha256).hexdigest()
+        return username if hmac.compare_digest(sig, expected) else None
+    except Exception:
+        return None
 
 # ── GitHub storage ────────────────────────────────────────────────────────────
 
@@ -385,6 +417,7 @@ def _complete_login(username: str, user: dict):
         "display_name":   user["display_name"],
         "is_admin":       user.get("is_admin", False),
         "expand_sidebar": True,
+        "_cookie_set":    False,  # sinaliza para main() gravar o cookie
     })
     st.rerun()
 
@@ -1411,9 +1444,35 @@ def main():
         </div>
     """, unsafe_allow_html=True)
 
+    cookies = CookieController()
+
     if not st.session_state.get("logged_in"):
+        # Tenta restaurar sessão a partir do cookie
+        token = cookies.get(_COOKIE_NAME)
+        if token:
+            username = _verify_token(token)
+            if username:
+                users = load_users()
+                user  = users.get(username)
+                if user:
+                    log_access(username, user["display_name"])
+                    st.session_state.update({
+                        "logged_in":      True,
+                        "username":       username,
+                        "corban":         user.get("corban"),
+                        "display_name":   user["display_name"],
+                        "is_admin":       user.get("is_admin", False),
+                        "expand_sidebar": True,
+                        "_cookie_set":    True,
+                    })
+                    st.rerun()
         login_page()
         return
+
+    # Grava cookie logo após o login (apenas uma vez por sessão)
+    if not st.session_state.get("_cookie_set"):
+        cookies.set(_COOKIE_NAME, _make_token(st.session_state["username"]), max_age=_COOKIE_MAX_AGE)
+        st.session_state["_cookie_set"] = True
 
     is_admin = st.session_state.get("is_admin", False)
 
@@ -1454,7 +1513,8 @@ def main():
         page = st.radio("Menu", menu, label_visibility="collapsed")
         st.divider()
         if st.button("Sair", width="stretch"):
-            for key in ["logged_in", "username", "corban", "display_name", "is_admin", "dl_state"]:
+            cookies.remove(_COOKIE_NAME)
+            for key in ["logged_in", "username", "corban", "display_name", "is_admin", "dl_state", "_cookie_set"]:
                 st.session_state.pop(key, None)
             st.rerun()
 
