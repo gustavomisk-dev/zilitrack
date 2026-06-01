@@ -178,7 +178,7 @@ hr {{ border-color: {BORDER} !important; }}
 # ── sessão persistente (cookie) ───────────────────────────────────────────────
 
 _COOKIE_NAME    = "zilitrack_session"
-_COOKIE_MAX_AGE = 60 * 60 * 24 * 7   # 7 dias em segundos
+_COOKIE_MAX_AGE = 60 * 60 * 24        # 1 dia em segundos
 
 def _session_secret() -> str:
     try:
@@ -230,20 +230,6 @@ def _gh_api_get(path: str):
         if e.code == 404:
             return None
         raise
-
-def _gh_push(gh_path: str, content_bytes: bytes, commit_msg: str) -> None:
-    existing = _gh_api_get(gh_path)
-    sha = existing.get("sha") if isinstance(existing, dict) else None
-    body: dict = {"message": commit_msg, "content": base64.b64encode(content_bytes).decode()}
-    if sha:
-        body["sha"] = sha
-    url = f"https://api.github.com/repos/{_gh_repo()}/contents/{gh_path}"
-    req = urllib.request.Request(
-        url, data=json.dumps(body).encode(),
-        headers={"Authorization": f"token {_gh_token()}", "Accept": "application/vnd.github.v3+json", "Content-Type": "application/json"},
-        method="PUT",
-    )
-    urllib.request.urlopen(req).close()
 
 def _gh_delete(gh_path: str, commit_msg: str) -> None:
     existing = _gh_api_get(gh_path)
@@ -860,11 +846,25 @@ def calcular_ranking() -> list[dict]:
 
 
 def _sort_dates(dates: list[str]) -> list[str]:
-    """Ordena datas no formato 'DD-MM-YYYY HH:MM' cronologicamente (mais recente primeiro)."""
     try:
         return sorted(dates, key=lambda d: datetime.strptime(d, "%d-%m-%Y %H:%M"), reverse=True)
     except ValueError:
         return sorted(dates, reverse=True)
+
+
+def files_controle_by_date() -> dict:
+    """Lista arquivos de grupo controle: sem_envio_{DD-MM-YYYY}_{HH-MM}.csv"""
+    result = {}
+    for f in _list_gh_folder("corban/controle"):
+        name = f.get("name", "")
+        if not (name.startswith("sem_envio_") and name.endswith(".csv")):
+            continue
+        stem = name[len("sem_envio_"):-len(".csv")]
+        parts = stem.split("_")
+        if len(parts) >= 2:
+            date_key = f"{parts[0]} {parts[1].replace('-', ':')}"
+            result[date_key] = f["path"]
+    return result
 
 
 def get_evolution_data(corban: str | None) -> pd.DataFrame:
@@ -900,10 +900,22 @@ def get_evolution_data(corban: str | None) -> pd.DataFrame:
 
 def page_clientes(corban: str | None):
     st.header("Clientes", anchor=False)
-    available = files_by_date(PASTA_ENVIADOS, corban, "enviados")
+    is_admin = st.session_state.get("is_admin")
+
+    # Admin vê seletor de tipo de base
+    if is_admin:
+        tipo = st.radio("Tipo", ["Enviados", "Grupo Controle"], horizontal=True, label_visibility="collapsed")
+    else:
+        tipo = "Enviados"
+
+    if tipo == "Grupo Controle":
+        available = files_controle_by_date()
+    else:
+        available = files_by_date(PASTA_ENVIADOS, corban, "enviados")
+
     if not available:
-        if st.session_state.get("is_admin"):
-            st.info("Nenhuma base enviada ainda. Acesse a página Upload para adicionar os arquivos.")
+        if is_admin:
+            st.info(f"Nenhuma base de {'grupo controle' if tipo == 'Grupo Controle' else 'enviados'} disponível ainda.")
         else:
             st.info(
                 "Nenhuma base de clientes disponível no momento. "
@@ -918,7 +930,7 @@ def page_clientes(corban: str | None):
     )
 
     # Marca base como vista (apenas para corbans, não para admin)
-    if corban and not st.session_state.get("is_admin"):
+    if tipo == "Enviados" and corban and not is_admin:
         latest = _sort_dates(list(available.keys()))[0]
         update_last_seen(corban, latest)
 
@@ -1105,81 +1117,15 @@ def page_conversao(corban: str | None):
 
 
 def page_upload():
-    st.header("Upload de Bases", anchor=False)
+    st.header("Arquivos no Servidor", anchor=False)
 
-    st.session_state.setdefault("up_env_n", 0)
-    st.session_state.setdefault("up_conv_n", 0)
-
-    corban_options = sorted(CORBAN_NAMES.keys())
-
-    # ── bases enviadas ────────────────────────────────────────────
-    st.subheader("Base Enviada", anchor=False)
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        corban_env = st.selectbox(
-            "Promotora", corban_options,
-            format_func=lambda c: CORBAN_NAMES.get(c, c),
-            key="up_corban_env",
-        )
-    with c2:
-        uploaded_env = st.file_uploader(
-            "Arquivo CSV", type="csv",
-            label_visibility="collapsed", key=f"up_env_{st.session_state.up_env_n}",
-        )
-    if uploaded_env and st.button("Salvar base", key="btn_env"):
-        agora = datetime.now()
-        nome  = f"{corban_env}_{agora.strftime('%d-%m-%Y')}_{agora.strftime('%H-%M')}_enviados.csv"
-        _gh_push(f"{PASTA_ENVIADOS}/{nome}", uploaded_env.read(), f"upload enviados: {nome}")
+    if st.button("Limpar convertidos", key="btn_limpar"):
+        for f in _list_gh_folder(PASTA_CONVERTIDOS):
+            if f.get("name", "").endswith(".csv"):
+                _gh_delete(f["path"], f"limpar: {f['name']}")
         _list_gh_folder.clear()
         _read_gh_csv.clear()
-        send_upload_notification([corban_env])
-        st.session_state.up_env_n += 1
         st.rerun()
-
-    st.divider()
-
-    # ── conversões ────────────────────────────────────────────────
-    st.subheader("Conversão", anchor=False)
-    c1, c2, c3 = st.columns([1, 1, 2])
-    with c1:
-        corban_conv = st.selectbox(
-            "Promotora", corban_options,
-            format_func=lambda c: CORBAN_NAMES.get(c, c),
-            key="up_corban_conv",
-        )
-    with c2:
-        bases_env = files_by_date(PASTA_ENVIADOS, corban_conv, "enviados")
-        bases_opts = _sort_dates(list(bases_env.keys())) if bases_env else []
-        base_sel = st.selectbox(
-            "Base correspondente",
-            bases_opts if bases_opts else ["—"],
-            disabled=not bases_opts,
-            key="up_base_conv",
-        )
-    with c3:
-        uploaded_conv = st.file_uploader(
-            "Arquivo CSV", type="csv",
-            label_visibility="collapsed", key=f"up_conv_{st.session_state.up_conv_n}",
-        )
-
-    bc1, bc2 = st.columns([1, 1])
-    with bc1:
-        if uploaded_conv and bases_opts and st.button("Salvar conversão", key="btn_conv"):
-            date_str, time_str = base_sel.split(" ")
-            nome = f"{corban_conv}_{date_str}_{time_str.replace(':', '-')}_convertidos.csv"
-            _gh_push(f"{PASTA_CONVERTIDOS}/{nome}", uploaded_conv.read(), f"upload convertidos: {nome}")
-            _list_gh_folder.clear()
-            _read_gh_csv.clear()
-            st.session_state.up_conv_n += 1
-            st.rerun()
-    with bc2:
-        if st.button("Limpar convertidos", key="btn_limpar"):
-            for f in _list_gh_folder(PASTA_CONVERTIDOS):
-                if f.get("name", "").endswith(".csv"):
-                    _gh_delete(f["path"], f"limpar: {f['name']}")
-            _list_gh_folder.clear()
-            _read_gh_csv.clear()
-            st.rerun()
 
     st.divider()
     st.markdown(
