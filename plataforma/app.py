@@ -1393,8 +1393,15 @@ def main():
     cookies = CookieController()
 
     if not st.session_state.get("logged_in"):
-        # Tenta restaurar sessão a partir do cookie
         token = cookies.get(_COOKIE_NAME)
+
+        # Primeira renderização: o JS ainda não leu o cookie.
+        # Mostra fundo escuro e aguarda o rerun automático do componente.
+        if token is None and not st.session_state.get("_cookie_checked"):
+            st.session_state["_cookie_checked"] = True
+            st.markdown("<style>[data-testid='stAppViewContainer']{background:#0F0F0F;}</style>", unsafe_allow_html=True)
+            st.stop()
+
         if token:
             username = _verify_token(token)
             if username:
@@ -1410,8 +1417,11 @@ def main():
                         "is_admin":       user.get("is_admin", False),
                         "expand_sidebar": True,
                         "_cookie_set":    True,
+                        "_cookie_checked": True,
                     })
                     st.rerun()
+
+        st.session_state["_cookie_checked"] = True
         login_page()
         return
 
