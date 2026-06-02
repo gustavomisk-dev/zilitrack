@@ -1207,60 +1207,45 @@ def page_como_usar():
     st.markdown(f"""
         <div style="max-width:680px; line-height:1.75; color:#E5E7EB;">
 
-        <h4 style="color:{GOLD}; margin-top:1.5rem;">Acesso à plataforma</h4>
+        <h4 style="color:{GOLD}; margin-top:1.5rem;">Acesso</h4>
         <p>
-            O login é feito com o seu <b>e-mail</b> e <b>senha</b> fornecidos pela ZiliCred.
-            Após inserir as credenciais corretamente, um <b>código de verificação</b> será
-            enviado para o seu e-mail. Insira o código para concluir o acesso.
-            O código é válido por 10 minutos — caso não chegue, verifique a caixa de spam
-            ou clique em <b>Reenviar código</b>.
+            Faça login com o seu <b>e-mail</b> e <b>senha</b> fornecidos pela ZiliCred.
+            A sessão permanece ativa por <b>1 dia</b> — após esse período será necessário
+            entrar novamente.
         </p>
 
         <h4 style="color:{GOLD}; margin-top:1.5rem;">Clientes</h4>
         <p>
-            Exibe a base de clientes enviada pela ZiliCred para a sua promotora.
+            Lista os clientes disponibilizados pela ZiliCred para a sua promotora.
             Use o seletor <b>Data de envio da base</b> para alternar entre lotes.
-            O card no topo mostra o total de clientes e a data de envio do lote selecionado.
-            A tabela exibe uma prévia do formato — os dados reais são acessados via download.
-        </p>
-        <p>
-            Para baixar a lista completa, clique em <b>Solicitar download</b>. Um código
-            será enviado ao seu e-mail para autorizar o download. Após inserir o código,
-            o arquivo Excel será gerado e uma senha para abri-lo será enviada por e-mail.
+            Novas bases são enviadas automaticamente ao longo do dia útil.
         </p>
         <p>
             Quando houver um lote novo ainda não visualizado, o menu exibirá
-            um indicador <b>●</b> ao lado de <b>Clientes</b>. Ele desaparece assim que
-            a página for aberta.
+            <b>●</b> ao lado de <b>Clientes</b>. O indicador desaparece ao abrir a página.
+        </p>
+        <p>
+            Para baixar a lista completa, clique em <b>Baixar arquivo</b>. O download
+            inicia imediatamente e a senha para abrir o arquivo Excel é enviada ao seu e-mail.
         </p>
 
         <h4 style="color:{GOLD}; margin-top:1.5rem;">Conversão</h4>
         <p>
-            Exibe os clientes da sua base que efetivaram um contrato com a ZiliCred.
-            Selecione o lote pela data de envio para visualizar o resumo de conversões.
-            O download segue o mesmo fluxo da aba Clientes: código por e-mail para
-            autorizar, e senha por e-mail para abrir o arquivo Excel.
+            Exibe os clientes da sua base que efetivaram contrato com a ZiliCred.
+            Selecione o lote pela data de envio para ver o resumo de conversões.
+            O gráfico <b>Evolução por Lote</b> mostra a taxa de conversão de cada lote
+            ao longo do tempo.
         </p>
         <p>
-            Abaixo da tabela, o gráfico <b>Evolução por Lote</b> mostra a taxa de
-            conversão de cada lote ao longo do tempo. Passe o cursor sobre os pontos
-            para ver o detalhe de enviados, convertidos e taxa de cada lote.
+            O download segue o mesmo fluxo da aba Clientes: clique em <b>Baixar arquivo</b>
+            e a senha chega por e-mail.
         </p>
 
         <h4 style="color:{GOLD}; margin-top:1.5rem;">Ranking</h4>
         <p>
-            Mostra a sua posição no ranking geral de conversões entre as promotoras
-            participantes. Os demais participantes não são identificados.
-            Também são exibidos os seus totais de clientes enviados, convertidos
-            e a taxa de conversão acumulada.
-        </p>
-
-        <h4 style="color:{GOLD}; margin-top:1.5rem;">Atualização dos dados</h4>
-        <p>
-            As bases de clientes e os relatórios de conversão são atualizados
-            periodicamente pela equipe da ZiliCred. Caso alguma aba apareça sem
-            informações, aguarde a próxima atualização. Você será notificado por
-            e-mail assim que uma nova base for disponibilizada.
+            Mostra a sua posição entre as promotoras participantes, com o total de clientes
+            enviados, convertidos e a taxa de conversão acumulada.
+            Os demais participantes não são identificados.
         </p>
 
         <h4 style="color:{GOLD}; margin-top:1.5rem;">Dúvidas ou problemas de acesso</h4>
