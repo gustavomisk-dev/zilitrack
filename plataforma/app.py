@@ -880,7 +880,10 @@ def page_clientes(corban: str | None):
     df["Nome do Cliente"] = df["Nome do Cliente"].apply(fmt_nome)
 
     total = len(df)
-    enviado_em = get_latest_processamento(df)
+    try:
+        enviado_em = datetime.strptime(selected, "%d-%m-%Y %H:%M").strftime("%d/%m/%Y às %H:%M")
+    except Exception:
+        enviado_em = None
     sep = f"<div style='width:1px; height:2.5rem; background:{BORDER};'></div>" if enviado_em else ""
     enviado_html = f"""
         {sep}
