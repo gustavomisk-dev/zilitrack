@@ -1250,7 +1250,7 @@ def page_como_usar():
 
         <h4 style="color:{GOLD}; margin-top:1.5rem;">Dúvidas ou problemas de acesso</h4>
         <p>
-            Entre em contato com a ZiliCred pelo e-mail ou pelo seu gerente de relacionamento.
+            Entre em contato com a ZiliCred.
         </p>
 
         </div>
