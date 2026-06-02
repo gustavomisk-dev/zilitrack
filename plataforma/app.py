@@ -587,7 +587,7 @@ def _render_download_seguro(username: str, page: str, selected: str,
 
     xl_data, pwd = st.session_state[cache_key]
 
-    if st.session_state.get(done_key):
+    if st.session_state.pop(done_key, False):
         st.success("Senha enviada por e-mail. Use-a para abrir o arquivo Excel.")
 
     def _ao_clicar():
