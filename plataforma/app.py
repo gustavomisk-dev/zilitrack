@@ -184,7 +184,7 @@ def _session_secret() -> str:
     try:
         return st.secrets["session"]["secret"]
     except Exception:
-        return "zilitrack-secret-fallback"
+        raise RuntimeError("session.secret não configurado em Streamlit Secrets.")
 
 def _make_token(username: str) -> str:
     expires = int(time.time()) + _COOKIE_MAX_AGE
@@ -252,7 +252,7 @@ def _list_gh_folder(folder: str) -> list:
 @st.cache_data(ttl=120)
 def _read_gh_csv(gh_path: str) -> pd.DataFrame:
     data = _gh_api_get(gh_path)
-    if not data:
+    if not data or not isinstance(data, dict):
         return pd.DataFrame()
     if "content" in data:
         raw = base64.b64decode(data["content"])
@@ -1462,7 +1462,7 @@ def main():
         st.divider()
         if st.button("Sair", width="stretch"):
             cookies.remove(_COOKIE_NAME)
-            for key in ["logged_in", "username", "corban", "display_name", "is_admin", "dl_state", "_cookie_set"]:
+            for key in ["logged_in", "username", "corban", "display_name", "is_admin", "dl_state", "_cookie_set", "_cookie_checked"]:
                 st.session_state.pop(key, None)
             st.rerun()
 
