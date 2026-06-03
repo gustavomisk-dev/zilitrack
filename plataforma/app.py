@@ -259,7 +259,7 @@ def _read_gh_csv(gh_path: str) -> pd.DataFrame:
 
 @st.cache_data(ttl=120)
 def get_upload_time(filename: str, file_path=None) -> str | None:
-    gh_path = str(file_path) if file_path and not isinstance(file_path, Path) else f"{PASTA_ENVIADOS}/{filename}"
+    gh_path = str(file_path) if file_path and isinstance(file_path, str) else f"{PASTA_ENVIADOS}/{filename}"
     try:
         url = f"https://api.github.com/repos/{_gh_repo()}/commits?path={gh_path}&per_page=1"
         req = urllib.request.Request(
@@ -576,8 +576,9 @@ def create_encrypted_excel(df: pd.DataFrame, password: str) -> bytes:
 def _render_download_seguro(username: str, page: str, selected: str,
                              df: pd.DataFrame, base_filename: str):
     xl_name    = base_filename.replace(".csv", ".xlsx")
-    cache_key  = f"_dl_{page}_{selected}"
-    done_key   = f"_dl_done_{page}_{selected}"
+    corban_ctx = st.session_state.get("corban") or st.session_state.get("username", "")
+    cache_key  = f"_dl_{page}_{corban_ctx}_{selected}"
+    done_key   = f"_dl_done_{page}_{corban_ctx}_{selected}"
 
     # Pré-gera o Excel uma vez por seleção (cacheado em session_state)
     if cache_key not in st.session_state:
@@ -1398,6 +1399,9 @@ def main():
                         "_cookie_checked": True,
                     })
                     st.rerun()
+            else:
+                # Token inválido ou expirado — remove do browser para não lopar
+                cookies.remove(_COOKIE_NAME)
 
         st.session_state["_cookie_checked"] = True
         login_page()
