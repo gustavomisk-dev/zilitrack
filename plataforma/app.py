@@ -616,9 +616,9 @@ def _render_download_seguro(username: str, page: str, selected: str,
 
 
 _DUMMY_CLIENTES = pd.DataFrame([
-    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "111.111.111-11", "Nome do Cliente": "Nome Sobrenome", "Celular": "5511999990001"},
-    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "222.222.222-22", "Nome do Cliente": "Nome Sobrenome", "Celular": "5521988880002"},
-    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "333.333.333-33", "Nome do Cliente": "Nome Sobrenome", "Celular": "5531977770003"},
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "111.111.111-11", "Nome do Cliente": "Nome Sobrenome", "Celular": "5511999990001", "Taxa": "4,98"},
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "222.222.222-22", "Nome do Cliente": "Nome Sobrenome", "Celular": "5521988880002", "Taxa": "4,48"},
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "333.333.333-33", "Nome do Cliente": "Nome Sobrenome", "Celular": "5531977770003", "Taxa": "4,98"},
 ])
 
 _DUMMY_CONVERSAO = pd.DataFrame([
@@ -880,12 +880,12 @@ def page_clientes(corban: str | None):
         update_last_seen(corban, latest)
 
     _raw = read_csv(available[selected])
-    _cols = ["CPF", "NomeCliente", "Celular", "Último Processamento"]
+    _cols = ["CPF", "NomeCliente", "Celular", "Taxa", "Último Processamento"]
     df = (
         _raw[[c for c in _cols if c in _raw.columns]]
         .rename(columns={"NomeCliente": "Nome do Cliente", "Último Processamento": "Data e Hora do Processamento"})
     )
-    col_order = [c for c in ["Data e Hora do Processamento", "CPF", "Nome do Cliente", "Celular"] if c in df.columns]
+    col_order = [c for c in ["Data e Hora do Processamento", "CPF", "Nome do Cliente", "Celular", "Taxa"] if c in df.columns]
     df = df[col_order]
     if df.empty:
         st.info("Nenhum cliente registrado nesta base.")
