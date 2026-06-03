@@ -396,8 +396,10 @@ def _login_2fa():
                 st.error("Código inválido ou expirado.")
         st.markdown("<div style='margin-top:0.5rem;'></div>", unsafe_allow_html=True)
         if st.button("Reenviar código", use_container_width=True):
-            generate_email_otp(username)
-            st.toast("Código reenviado.")
+            if generate_email_otp(username):
+                st.toast("Código reenviado.")
+            else:
+                st.error("Erro ao reenviar código. Verifique a configuração de e-mail.")
         if st.button("← Voltar ao login", use_container_width=True):
             _2fa_cleanup()
             st.rerun()
@@ -1419,7 +1421,11 @@ def main():
 
     # Grava cookie logo após o login (apenas uma vez por sessão)
     if not st.session_state.get("_cookie_set"):
-        cookies.set(_COOKIE_NAME, _make_token(st.session_state["username"]), max_age=_COOKIE_MAX_AGE)
+        try:
+            cookies.set(_COOKIE_NAME, _make_token(st.session_state["username"]), max_age=_COOKIE_MAX_AGE)
+        except RuntimeError:
+            st.error("Configuração de sessão ausente. Adicione [session] secret nos Streamlit Secrets.")
+            st.stop()
         st.session_state["_cookie_set"] = True
 
     is_admin = st.session_state.get("is_admin", False)
