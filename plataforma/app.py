@@ -258,13 +258,11 @@ def _read_gh_csv(gh_path: str) -> pd.DataFrame:
         raw = base64.b64decode(data["content"])
     else:
         # Arquivos >1 MB: GitHub não inclui content, usa download_url
+        # download_url já vem pré-autenticado — não enviar Authorization
         download_url = data.get("download_url")
         if not download_url:
             return pd.DataFrame()
-        req = urllib.request.Request(
-            download_url, headers={"Authorization": f"token {_gh_token()}"}
-        )
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(download_url) as resp:
             raw = resp.read()
     return pd.read_csv(io.StringIO(raw.decode("utf-8-sig")), sep=";", dtype=str, keep_default_na=False)
 
