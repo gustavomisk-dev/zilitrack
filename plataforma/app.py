@@ -867,11 +867,14 @@ def page_clientes(corban: str | None):
         latest = _sort_dates(list(available.keys()))[0]
         update_last_seen(corban, latest)
 
+    _raw = read_csv(available[selected])
+    _cols = ["CPF", "NomeCliente", "Celular", "Último Processamento"]
     df = (
-        read_csv(available[selected])[["CPF", "NomeCliente", "Último Processamento"]]
+        _raw[[c for c in _cols if c in _raw.columns]]
         .rename(columns={"NomeCliente": "Nome do Cliente", "Último Processamento": "Data e Hora do Processamento"})
-        [["Data e Hora do Processamento", "CPF", "Nome do Cliente"]]
     )
+    col_order = [c for c in ["Data e Hora do Processamento", "CPF", "Nome do Cliente", "Celular"] if c in df.columns]
+    df = df[col_order]
     if df.empty:
         st.info("Nenhum cliente registrado nesta base.")
         return
@@ -962,11 +965,13 @@ def page_controle():
             st.info("Nenhuma base de grupo controle disponível ainda.")
             return
         selected = st.selectbox("Data", _sort_dates(list(available.keys())))
-        df = (
-            read_csv(available[selected])[["CPF", "NomeCliente", "Último Processamento"]]
-            .rename(columns={"NomeCliente": "Nome do Cliente", "Último Processamento": "Data e Hora do Processamento"})
-            [["Data e Hora do Processamento", "CPF", "Nome do Cliente"]]
+        _raw3 = read_csv(available[selected])
+        _cols3 = ["CPF", "NomeCliente", "Celular", "Último Processamento"]
+        df = _raw3[[c for c in _cols3 if c in _raw3.columns]].rename(
+            columns={"NomeCliente": "Nome do Cliente", "Último Processamento": "Data e Hora do Processamento"}
         )
+        col_order3 = [c for c in ["Data e Hora do Processamento", "CPF", "Nome do Cliente", "Celular"] if c in df.columns]
+        df = df[col_order3]
         if df.empty:
             st.info("Nenhum cliente nesta base.")
             return
