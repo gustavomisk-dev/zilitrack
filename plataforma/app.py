@@ -616,9 +616,9 @@ def _render_download_seguro(username: str, page: str, selected: str,
 
 
 _DUMMY_CLIENTES = pd.DataFrame([
-    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "111.111.111-11", "Nome do Cliente": "Nome Sobrenome", "Celular": "5511999990001", "Taxa": "0,00"},
-    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "222.222.222-22", "Nome do Cliente": "Nome Sobrenome", "Celular": "5521988880002", "Taxa": "0,00"},
-    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "333.333.333-33", "Nome do Cliente": "Nome Sobrenome", "Celular": "5531977770003", "Taxa": "0,00"},
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "111.111.111-11", "Nome do Cliente": "Nome Sobrenome", "Celular": "5511999990001", "Taxa": "1,23"},
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "222.222.222-22", "Nome do Cliente": "Nome Sobrenome", "Celular": "5521988880002", "Taxa": "1,23"},
+    {"Data e Hora do Processamento": "DD/MM/AAAA HH:MM", "CPF": "333.333.333-33", "Nome do Cliente": "Nome Sobrenome", "Celular": "5531977770003", "Taxa": "1,23"},
 ])
 
 _DUMMY_CONVERSAO = pd.DataFrame([
