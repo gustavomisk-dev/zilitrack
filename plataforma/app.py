@@ -574,9 +574,9 @@ def create_encrypted_excel(df: pd.DataFrame, password: str) -> bytes:
 
 
 def _render_download_seguro(username: str, page: str, selected: str,
-                             df: pd.DataFrame, base_filename: str):
+                             df: pd.DataFrame, base_filename: str, corban: str = ""):
     xl_name    = base_filename.replace(".csv", ".xlsx")
-    corban_ctx = st.session_state.get("corban") or st.session_state.get("username", "")
+    corban_ctx = corban or st.session_state.get("corban") or st.session_state.get("username", "")
     cache_key  = f"_dl_{page}_{corban_ctx}_{selected}"
     done_key   = f"_dl_done_{page}_{corban_ctx}_{selected}"
 
@@ -785,7 +785,7 @@ def files_controle_by_date() -> dict:
     result = {}
     for f in _list_gh_folder("corban/controle"):
         name = f.get("name", "")
-        if not (name.startswith("sem_envio_") and name.endswith(".csv")):
+        if not (name.startswith("sem_envio_") and name.endswith(".csv") and "_convertidos" not in name):
             continue
         stem = name[len("sem_envio_"):-len(".csv")]
         parts = stem.split("_")
@@ -932,7 +932,7 @@ def page_clientes(corban: str | None):
         st.caption("Prévia do formato — dados reais disponíveis via download")
         st.dataframe(preview, use_container_width=True, hide_index=False)
         username = st.session_state.get("username", "")
-        _render_download_seguro(username, "clientes", selected, df, f"clientes_{selected}.csv")
+        _render_download_seguro(username, "clientes", selected, df, f"clientes_{selected}.csv", corban=corban or "")
 
 
 def page_controle():
@@ -1013,8 +1013,9 @@ def page_conversao(corban: str | None):
 
     available_env = files_by_date(PASTA_ENVIADOS, corban, "enviados")
     if selected in available_env:
-        df_env = read_csv(available_env[selected])[["CPF", "NomeCliente", "Último Processamento"]]
-        df_conv = df_conv.merge(df_env, on="CPF", how="left")
+        _env_raw = read_csv(available_env[selected])
+        _env_cols = [c for c in ["CPF", "NomeCliente", "Último Processamento"] if c in _env_raw.columns]
+        df_conv = df_conv.merge(_env_raw[_env_cols], on="CPF", how="left")
 
     cols = [c for c in ["CPF", "NomeCliente", "Último Processamento", "Valor Contratação"] if c in df_conv.columns]
     df_conv = (
@@ -1086,7 +1087,7 @@ def page_conversao(corban: str | None):
         st.caption("Prévia do formato — dados reais disponíveis via download")
         st.dataframe(preview, use_container_width=True, hide_index=False)
         username = st.session_state.get("username", "")
-        _render_download_seguro(username, "conversao", selected, df_conv, f"conversao_{selected}.csv")
+        _render_download_seguro(username, "conversao", selected, df_conv, f"conversao_{selected}.csv", corban=corban or "")
 
     evo = get_evolution_data(corban)
     if not evo.empty:
