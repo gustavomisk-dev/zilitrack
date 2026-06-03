@@ -545,15 +545,15 @@ def generate_file_password() -> str:
     return "".join(_secrets.choice(alphabet) for _ in range(10))
 
 
-def send_file_password_email(username: str, password: str, filename: str):
+def send_file_password_email(username: str, password: str, filename: str) -> bool:
     try:
         smtp_cfg = st.secrets.get("smtp", {})
         if not smtp_cfg or not smtp_cfg.get("user"):
-            return
+            return False
         users = load_users()
         email = users.get(username, {}).get("email")
         if not email:
-            return
+            return False
         msg = MIMEMultipart("alternative")
         msg["Subject"] = f"Senha do arquivo · {APP_NAME}"
         msg["From"]    = f"{APP_NAME} <{smtp_cfg['user']}>"
@@ -568,8 +568,9 @@ def send_file_password_email(username: str, password: str, filename: str):
             srv.starttls()
             srv.login(smtp_cfg["user"], smtp_cfg["password"])
             srv.sendmail(smtp_cfg["user"], email, msg.as_string())
+        return True
     except Exception:
-        pass
+        return False
 
 
 def create_encrypted_excel(df: pd.DataFrame, password: str) -> bytes:
@@ -599,12 +600,17 @@ def _render_download_seguro(username: str, page: str, selected: str,
 
     xl_data, pwd = st.session_state[cache_key]
 
-    if st.session_state.pop(done_key, False):
+    _done = st.session_state.pop(done_key, False)
+    _ok   = st.session_state.pop(f"{done_key}_ok", True)
+    if _done and _ok:
         st.success("Senha enviada por e-mail. Use-a para abrir o arquivo Excel.")
+    elif _done and not _ok:
+        st.error("Erro ao enviar a senha por e-mail. Verifique a configuração de SMTP.")
 
     def _ao_clicar():
-        send_file_password_email(username, pwd, xl_name)
-        st.session_state[done_key] = True
+        ok = send_file_password_email(username, pwd, xl_name)
+        st.session_state[done_key] = ok
+        st.session_state[f"{done_key}_ok"] = ok
 
     st.download_button(
         "Baixar arquivo",
